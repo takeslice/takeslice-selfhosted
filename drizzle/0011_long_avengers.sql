@@ -1,0 +1,3 @@
+ALTER TABLE "commission" DROP CONSTRAINT "commission_amount_check";--> statement-breakpoint
+ALTER TABLE "commission" ADD CONSTRAINT "commission_original_amount_check_limit" CHECK ("commission"."original_amount_minor" <= "commission"."sale_amount_minor");--> statement-breakpoint
+ALTER TABLE "commission" ADD CONSTRAINT "commission_amount_check" CHECK ("commission"."amount_minor" >= 0 and "commission"."amount_minor" <= "commission"."sale_amount_minor");

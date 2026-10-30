@@ -8,7 +8,11 @@ import { AffiliateManagement } from "@/features/affiliates/components/affiliate-
 import { CopyButton } from "@/features/affiliates/components/copy-button";
 import { AffiliateStatusBadge, ApplicationStatusBadge } from "@/features/affiliates/components/status-badge";
 import { getAffiliateDetail } from "@/features/affiliates/server/queries";
+import { PayoutForm } from "@/features/payouts/components/payout-form";
+import { affiliateBalance, listPayouts } from "@/features/payouts/server/payouts";
+import { getProgramSettings } from "@/features/program/server/settings";
 import { requireAdmin } from "@/lib/auth/session";
+import { formatMoney } from "@/lib/money";
 import { env } from "@/lib/env";
 
 export const metadata: Metadata = { title: "Affiliate" };
@@ -23,6 +27,11 @@ export default async function AffiliateDetailPage({ params }: PageProps<"/dashbo
   const person = await getAffiliateDetail(id);
   if (!person) notFound();
 
+  const settings = await getProgramSettings();
+  const [balance, payouts] = await Promise.all([
+    settings && person.status === "approved" ? affiliateBalance(person.id, settings.currency) : null,
+    listPayouts(person.id),
+  ]);
   const referralLink = person.referralCode ? `${env.APP_URL}/r/${person.referralCode}` : null;
 
   return (
@@ -103,6 +112,45 @@ export default async function AffiliateDetailPage({ params }: PageProps<"/dashbo
               </ul>
             )}
           </Card>
+
+          {settings && balance && (
+            <Card>
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-medium">Payouts</h2>
+                <Link href="/dashboard/payouts" className="text-xs text-muted-foreground hover:text-foreground">
+                  All payouts
+                </Link>
+              </div>
+              <div className="mt-2 mb-3 flex flex-wrap gap-x-4 gap-y-1 text-sm">
+                <span>
+                  Available <span className="font-medium">{formatMoney(balance.availableMinor, balance.currency)}</span>
+                </span>
+                {balance.pendingPayoutMinor > 0 && (
+                  <span className="text-muted-foreground">
+                    Pending payout {formatMoney(balance.pendingPayoutMinor, balance.currency)}
+                  </span>
+                )}
+              </div>
+              <PayoutForm
+                affiliateId={person.id}
+                availableMinor={balance.availableMinor}
+                currency={balance.currency}
+                minimumPayoutMinor={settings.minimumPayoutMinor}
+              />
+              {payouts.length > 0 && (
+                <ul className="mt-4 divide-y rounded-lg border text-sm">
+                  {payouts.slice(0, 5).map((payout) => (
+                    <li key={payout.id} className="flex items-center justify-between gap-2 px-3 py-2">
+                      <Link href={`/dashboard/payouts/${payout.id}`} className="text-muted-foreground hover:text-foreground">
+                        {formatDate(payout.createdAt)} · {payout.status}
+                      </Link>
+                      <span className="font-medium">{formatMoney(payout.amountMinor, payout.currency)}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Card>
+          )}
 
           <Card>
             <h2 className="text-sm font-medium">Partner view</h2>

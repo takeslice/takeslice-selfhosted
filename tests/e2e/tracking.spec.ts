@@ -4,6 +4,7 @@ import { test } from "./fixtures";
 
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const BASE_URL = process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000";
 
 test.skip(!ADMIN_EMAIL || !ADMIN_PASSWORD, "ADMIN_EMAIL and ADMIN_PASSWORD are required");
 test.setTimeout(120_000);
@@ -48,6 +49,23 @@ async function clickLink(page: Page, code: string, query = "") {
   return new URL(location).searchParams.get("tscid");
 }
 
+test("rejects an oversized chunked click body", async () => {
+  const chunk = new Uint8Array(48 * 1024).fill(120);
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(chunk);
+      controller.close();
+    },
+  });
+  const response = await fetch(`${BASE_URL}/api/track/click`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: stream,
+    duplex: "half",
+  } as RequestInit & { duplex: "half" });
+  expect(response.status).toBe(413);
+});
+
 test("API tracks clicks, conversions, duplicates and attribution failures", async ({ page }) => {
   const suffix = Date.now().toString().slice(-6);
   const name = `Track Tina ${suffix}`;
@@ -78,6 +96,14 @@ test("API tracks clicks, conversions, duplicates and attribution failures", asyn
   expect(firstBody.attribution.outcome).toBe("attributed");
   expect(firstBody.attribution.via).toBe("click");
   expect(firstBody.duplicate).toBe(false);
+  expect(firstBody.commissionId).toMatch(/^com_/);
+
+  await page.goto("/dashboard/commissions");
+  await expect(page.getByRole("link", { name: externalId })).toBeVisible();
+  await page.getByRole("link", { name: externalId }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByText("Pending", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Money", { exact: true })).toBeVisible();
 
   const duplicate = await page.request.post("/api/v1/conversions", {
     headers: auth,

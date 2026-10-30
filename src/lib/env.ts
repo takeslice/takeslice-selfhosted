@@ -21,6 +21,8 @@ export const env = createEnv({
     PORT: z.coerce.number().int().positive().default(3000),
     /** Set when a reverse proxy terminates TLS in front of the app. */
     TRUST_PROXY: z.enum(["true", "false"]).default("false").transform((value) => value === "true"),
+    /** Comma-separated CIDRs of reverse proxies whose forwarded client address is trusted. */
+    TRUSTED_PROXY_CIDRS: z.string().optional(),
     LOG_LEVEL: z.enum(["debug", "info", "warn", "error"]).default("info"),
     SENTRY_DSN: z.url().optional(),
     /** Test-only: write emails as JSON files to this folder instead of sending them. */

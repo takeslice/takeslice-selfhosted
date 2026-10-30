@@ -19,7 +19,23 @@ export interface ConversionFact {
   clickId: string | null;
   couponCode: string | null;
   subscriptionRef: string | null;
+  paymentReference?: string | null;
   renewal: boolean;
+}
+
+export interface RefundFact {
+  kind: "refund";
+  providerEventId: string;
+  type: string;
+  /** Payment or charge reference stored on the original conversion. */
+  paymentReference: string | null;
+  externalId: string | null;
+  amountMinor: number;
+  /** Stripe's charge.refunded amount is cumulative; API refunds are incremental. */
+  cumulative: boolean;
+  refundKind: "refund" | "chargeback";
+  currency: string;
+  occurredAt: Date;
 }
 
 export interface IgnoredFact {
@@ -41,7 +57,7 @@ export interface InvalidFact {
   reason: string;
 }
 
-export type ProviderFact = ConversionFact | IgnoredFact | DeferredFact;
+export type ProviderFact = ConversionFact | RefundFact | IgnoredFact | DeferredFact;
 
 export interface ProviderAdapter {
   id: ProviderId;

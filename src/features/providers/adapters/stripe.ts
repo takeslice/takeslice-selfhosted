@@ -15,6 +15,7 @@ import {
 } from "./helpers";
 
 const MAPPED_EVENTS = new Set(["checkout.session.completed", "checkout.session.async_payment_succeeded", "invoice.paid"]);
+const REFUND_EVENTS = new Set(["charge.refunded", "charge.dispute.created"]);
 
 export const stripeAdapter: ProviderAdapter = {
   id: "stripe",
@@ -22,7 +23,13 @@ export const stripeAdapter: ProviderAdapter = {
   credentialLabel: "Secret key",
   credentialPlaceholder: "sk_live_…",
   autoWebhook: true,
-  webhookEvents: ["checkout.session.completed", "invoice.paid"],
+  webhookEvents: [
+    "checkout.session.completed",
+    "checkout.session.async_payment_succeeded",
+    "invoice.paid",
+    "charge.refunded",
+    "charge.dispute.created",
+  ],
   verify(rawBody, headers, secret) {
     const header = headers.get("stripe-signature");
     if (!header || !secret) return false;
@@ -47,11 +54,34 @@ export const stripeAdapter: ProviderAdapter = {
     const type = text(payload.type);
     const providerEventId = eventId(text(payload.id), rawBody);
     if (!type) return { kind: "invalid", reason: "Stripe event has no type." };
+
+    const object = asRecord(read(payload, "data", "object"));
+    if (REFUND_EVENTS.has(type)) {
+      if (!object) return { kind: "invalid", reason: "Stripe event has no object." };
+      const created = parseDate(payload.created);
+      const currency = currencyCode(object.currency);
+      const chargeback = type === "charge.dispute.created";
+      const amountMinor = integerMinor(chargeback ? object.amount : object.amount_refunded);
+      if (!created || !currency || amountMinor === null || amountMinor <= 0) {
+        return { kind: "invalid", reason: "Stripe refund is missing its time, currency or amount." };
+      }
+      return {
+        kind: "refund",
+        providerEventId,
+        type,
+        paymentReference: optionalString(object.payment_intent) ?? optionalString(object.charge),
+        externalId: optionalString(object.payment_intent) ?? optionalString(object.charge),
+        amountMinor,
+        cumulative: !chargeback,
+        refundKind: chargeback ? "chargeback" : "refund",
+        currency,
+        occurredAt: created,
+      };
+    }
+
     if (!MAPPED_EVENTS.has(type)) {
       return { kind: "ignored", providerEventId, type, reason: "Event type does not create a conversion." };
     }
-
-    const object = asRecord(read(payload, "data", "object"));
     if (!object) return { kind: "invalid", reason: "Stripe event has no object." };
 
     const created = parseDate(payload.created);
@@ -62,11 +92,16 @@ export const stripeAdapter: ProviderAdapter = {
       if (text(object.status) !== "paid") {
         return { kind: "ignored", providerEventId, type, reason: "Invoice is not paid." };
       }
+      const billingReason = text(object.billing_reason);
+      if (billingReason === "subscription_create") {
+        // Stripe Checkout already emitted checkout.session.completed for this payment.
+        // Recording the invoice as well would create a second conversion for one charge.
+        return { kind: "ignored", providerEventId, type, reason: "The checkout session records the first subscription payment." };
+      }
       const amountMinor = integerMinor(object.amount_paid);
       const externalId = text(object.id);
       if (amountMinor === null || !externalId) return { kind: "invalid", reason: "Stripe invoice is missing its amount or ID." };
       const metadata = asRecord(object.metadata) ?? asRecord(read(object, "subscription_details", "metadata"));
-      const billingReason = text(object.billing_reason);
       return {
         kind: "conversion",
         providerEventId,
@@ -79,6 +114,7 @@ export const stripeAdapter: ProviderAdapter = {
         clickId: clickIdFromMetadata(metadata),
         couponCode: couponFromMetadata(metadata),
         subscriptionRef: optionalString(object.subscription),
+        paymentReference: optionalString(object.payment_intent) ?? optionalString(object.charge),
         renewal: billingReason === "subscription_cycle",
       };
     }
@@ -99,9 +135,10 @@ export const stripeAdapter: ProviderAdapter = {
       amountMinor,
       currency,
       occurredAt: created,
-      clickId: clickIdFromMetadata(metadata) ?? clickIdFromMetadata({ client_reference_id: object.client_reference_id }),
+      clickId: clickIdFromMetadata({ client_reference_id: object.client_reference_id }) ?? clickIdFromMetadata(metadata),
       couponCode: couponFromMetadata(metadata),
       subscriptionRef: optionalString(object.subscription),
+      paymentReference: optionalString(object.payment_intent) ?? optionalString(object.id),
       renewal: false,
     };
   },

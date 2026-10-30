@@ -5,15 +5,21 @@ import { getProgramSettings } from "@/features/program/server/settings";
 import { countPendingApplications } from "@/features/applications/server/apply";
 import { affiliateCounts } from "@/features/affiliates/server/queries";
 import { requireAdmin } from "@/lib/auth/session";
+import { getEmailSettings } from "@/lib/email";
 import { formatMoney } from "@/lib/money";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/field";
+import { Alert, Card } from "@/components/ui/field";
 
 export const metadata: Metadata = { title: "Overview" };
 
 export default async function DashboardPage() {
   await requireAdmin();
-  const [settings, pendingApplications, counts] = await Promise.all([getProgramSettings(), countPendingApplications(), affiliateCounts()]);
+  const [settings, pendingApplications, counts, email] = await Promise.all([
+    getProgramSettings(),
+    countPendingApplications(),
+    affiliateCounts(),
+    getEmailSettings(),
+  ]);
 
   return (
     <div className="flex flex-col gap-6">
@@ -28,6 +34,16 @@ export default async function DashboardPage() {
           </Button>
         </Link>
       </div>
+
+      {!email?.host && (
+        <Alert tone="warning">
+          Email is not configured. Partners cannot verify their address, sign in, or receive payout notifications.{" "}
+          <Link href="/dashboard/settings/email" className="font-medium underline underline-offset-4">
+            Set up SMTP
+          </Link>
+          .
+        </Alert>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <Card>

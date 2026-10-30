@@ -45,7 +45,7 @@ export function VerifyEmailForm({ initialEmail, next = "" }: { initialEmail: str
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+    <form method="post" onSubmit={submit} className="flex flex-col gap-4" noValidate>
       {error && <Alert tone="error">{error}</Alert>}
       {notice && <Alert tone="success">{notice}</Alert>}
       <Field label="Email" htmlFor="verify-email">

@@ -23,6 +23,8 @@ export const conversionSchema = z
       .transform((value) => value.toUpperCase())
       .optional(),
     subscriptionRef: z.string().trim().min(1).max(200).optional(),
+    /** Provider payment or charge ID so a later refund can be matched. */
+    paymentReference: z.string().trim().min(1).max(200).optional(),
     renewal: z.boolean().optional().default(false),
     occurredAt: z.coerce.date().optional(),
   })

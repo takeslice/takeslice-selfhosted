@@ -7,6 +7,7 @@
   "engines": {
     "node": ">=22"
   },
+  "packageManager": "pnpm@10.33.0",
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver"]
   },
@@ -22,7 +23,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
     "db:studio": "drizzle-kit studio",
-    "worker": "node scripts/worker.mjs"
+    "worker": "node --conditions=react-server --import tsx scripts/worker.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^6.0.2",

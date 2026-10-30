@@ -95,7 +95,7 @@ export function QuestionsManager({ questions }: { questions: QuestionRow[] }) {
         </div>
         {saveState.error && <Alert tone="error">{saveState.error}</Alert>}
         {saveState.ok && saveState.message && <Alert tone="success">{saveState.message}</Alert>}
-        <form key={editing?.id ?? "new"} ref={formRef} onSubmit={save} className="flex flex-col gap-4">
+        <form key={editing?.id ?? "new"} ref={formRef} method="post" onSubmit={save} className="flex flex-col gap-4">
           {editing && <input type="hidden" name="id" value={editing.id} />}
           <Field label="Question" htmlFor="label" error={saveState.fieldErrors?.label}>
             <Input id="label" name="label" defaultValue={editing?.label ?? ""} required maxLength={200} placeholder="Where will you promote us?" />

@@ -3,6 +3,8 @@ import { adapterFor } from "../adapters";
 import { isProviderId } from "../constants";
 import { getProviderConnection } from "./connections";
 import { ingestWebhookFact } from "./ingest";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { readBoundedBody } from "@/lib/request";
 
 const MAX_BODY_BYTES = 1024 * 1024;
 
@@ -22,20 +24,18 @@ export async function handleProviderWebhook(
     return json({ error: "Unknown webhook endpoint." }, 404);
   }
 
-  const declaredLength = Number(request.headers.get("content-length") ?? "0");
-  if (Number.isFinite(declaredLength) && declaredLength > MAX_BODY_BYTES) {
-    return json({ error: "Webhook payload is too large." }, 413);
-  }
+  // A provider can legitimately burst, so the ceiling is high. It exists to bound
+  // unauthenticated body parsing and signature work, not to throttle normal traffic.
+  const rate = await checkRateLimit(`webhook:${connection.id}`, 1200, 60);
+  if (!rate.allowed) return rateLimitResponse(rate);
 
-  let rawBody: string;
-  try {
-    rawBody = await request.text();
-  } catch {
-    return json({ error: "The webhook body could not be read." }, 400);
+  const body = await readBoundedBody(request, MAX_BODY_BYTES);
+  if (!body.ok) {
+    return body.reason === "too_large"
+      ? json({ error: "Webhook payload is too large." }, 413)
+      : json({ error: "The webhook body could not be read." }, 400);
   }
-  if (Buffer.byteLength(rawBody, "utf8") > MAX_BODY_BYTES) {
-    return json({ error: "Webhook payload is too large." }, 413);
-  }
+  const rawBody = body.body;
 
   const adapter = adapterFor(connection.provider);
   let verified = false;

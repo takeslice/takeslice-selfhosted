@@ -1,4 +1,4 @@
-import { layout } from "./index";
+import { escapeHtml, layout } from "./index";
 
 const codeStyle =
   "display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:28px;letter-spacing:6px;font-weight:600;background:#f6f7f9;border-radius:8px;padding:12px 18px";
@@ -39,9 +39,9 @@ export function applicationReceived(to: string, programName: string, appUrl: str
     subject: `We received your application to ${programName}`,
     html: layout(
       "Application received",
-      `<p>Thanks for applying to <strong>${programName}</strong>. We review applications by hand and will email you when there is a decision.</p>
+      `<p>Thanks for applying to <strong>${escapeHtml(programName)}</strong>. We review applications by hand and will email you when there is a decision.</p>
        <p>You can check the status any time in your partner dashboard.</p>
-       <p><a href="${appUrl}/partners/dashboard">Open partner dashboard</a></p>`,
+       <p><a href="${escapeHtml(appUrl)}/partners/dashboard">Open partner dashboard</a></p>`,
       appUrl,
     ),
     text: `We received your application to ${programName}. Check the status at ${appUrl}/partners/dashboard`,
@@ -54,8 +54,8 @@ export function applicationApproved(to: string, programName: string, appUrl: str
     subject: `You are approved for ${programName}`,
     html: layout(
       "You are approved",
-      `<p>Your application to <strong>${programName}</strong> was approved. Your referral link and dashboard are ready.</p>
-       <p><a href="${appUrl}/partners/dashboard">Open partner dashboard</a></p>`,
+      `<p>Your application to <strong>${escapeHtml(programName)}</strong> was approved. Your referral link and dashboard are ready.</p>
+       <p><a href="${escapeHtml(appUrl)}/partners/dashboard">Open partner dashboard</a></p>`,
       appUrl,
     ),
     text: `You are approved for ${programName}. Open your dashboard: ${appUrl}/partners/dashboard`,
@@ -68,8 +68,8 @@ export function applicationRejected(to: string, programName: string, reason: str
     subject: `Update on your application to ${programName}`,
     html: layout(
       "Application update",
-      `<p>We could not approve your application to <strong>${programName}</strong>.</p>
-       <p style="background:#f6f7f9;padding:12px;border-radius:8px">${reason}</p>
+      `<p>We could not approve your application to <strong>${escapeHtml(programName)}</strong>.</p>
+       <p style="background:#f6f7f9;padding:12px;border-radius:8px">${escapeHtml(reason)}</p>
        <p>You can reply to this email if you think this was a mistake.</p>`,
       appUrl,
     ),
@@ -83,8 +83,8 @@ export function newApplicationForAdmin(to: string, applicantName: string, appUrl
     subject: `New affiliate application from ${applicantName}`,
     html: layout(
       "New affiliate application",
-      `<p><strong>${applicantName}</strong> applied to your partner program.</p>
-       <p><a href="${appUrl}/dashboard/applications">Review the application</a></p>`,
+      `<p><strong>${escapeHtml(applicantName)}</strong> applied to your partner program.</p>
+       <p><a href="${escapeHtml(appUrl)}/dashboard/applications">Review the application</a></p>`,
       appUrl,
     ),
     text: `${applicantName} applied. Review: ${appUrl}/dashboard/applications`,

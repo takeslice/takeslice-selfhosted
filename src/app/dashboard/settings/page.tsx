@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, KeyRound, Mail, Palette, PencilRuler, ScrollText, SlidersHorizontal } from "lucide-react";
+import { ArrowRight, KeyRound, Mail, Palette, PencilRuler, ScrollText, SlidersHorizontal, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Card } from "@/components/ui/field";
 import { getProgramSettings } from "@/features/program/server/settings";
@@ -15,6 +15,7 @@ const SECTIONS = [
   { href: "/dashboard/settings/email", title: "Email", description: "SMTP server used for codes, resets and partner notifications.", icon: Mail },
   { href: "/dashboard/settings/questions", title: "Application questions", description: "Extra questions shown to people applying to your program.", icon: PencilRuler },
   { href: "/dashboard/settings/api-keys", title: "API keys", description: "Send conversions from your backend or a custom checkout.", icon: KeyRound },
+  { href: "/dashboard/settings/ai-setup", title: "AI Setup", description: "Generate a tailored integration prompt for a coding agent.", icon: Sparkles },
   { href: "/dashboard/settings/audit", title: "Audit log", description: "A record of consequential settings and account changes.", icon: ScrollText },
 ] as const;
 
@@ -68,6 +69,8 @@ function statusFor(
       return `${activeQuestions} active`;
     case "/dashboard/settings/api-keys":
       return "Conversion API";
+    case "/dashboard/settings/ai-setup":
+      return "Cursor, Claude Code, Codex";
     default:
       return "View history";
   }

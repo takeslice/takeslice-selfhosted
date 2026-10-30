@@ -1,8 +1,22 @@
+import { execFileSync } from "node:child_process";
 import { expect, type Page } from "@playwright/test";
 import { test } from "./fixtures";
 
 const email = process.env.ADMIN_EMAIL;
 const password = process.env.ADMIN_PASSWORD;
+
+function runWorker() {
+  execFileSync(process.execPath, ["--conditions=react-server", "--import", "tsx", "scripts/worker.ts"], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      WORKER_ONCE: "1",
+      APP_URL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3000",
+      BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET ?? "e2e-secret-value-that-is-long-enough-123",
+    },
+    stdio: "pipe",
+  });
+}
 
 async function signIn(page: Page) {
   await page.goto("/login");
@@ -72,6 +86,40 @@ test.describe("admin settings", () => {
     await page.getByRole("button", { name: "Send test email" }).click();
     await expect(page.getByText(/Test captured in the email outbox/)).toBeVisible();
     await expect(page.getByText(/Last tested/)).toBeVisible();
+  });
+
+  test("diagnostics shows a worker check-in and the current queues", async ({ page }) => {
+    test.skip(!process.env.DATABASE_URL, "DATABASE_URL is required to run the worker");
+    runWorker();
+
+    await page.goto("/dashboard/settings/diagnostics");
+    await expect(page.getByRole("heading", { name: "Diagnostics" })).toBeVisible();
+    await expect(page.getByText("Background worker is running.")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Email delivery" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Commission queues" })).toBeVisible();
+  });
+
+  test("generates an AI Setup prompt for the selected provider", async ({ page }) => {
+    await page.goto("/dashboard/settings/ai-setup");
+    await expect(page.getByRole("heading", { name: "AI Setup" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Endpoints in this release" })).toBeVisible();
+
+    const provider = page.getByLabel("Payment provider");
+    const prompt = page.getByLabel("Generated TakeSlice integration prompt");
+
+    await provider.selectOption("custom");
+    await expect(prompt).toHaveValue(/No payment-provider webhook is required/);
+    await expect(prompt).toHaveValue(/POST https?:\/\/.+\/api\/v1\/conversions/);
+
+    await provider.selectOption("stripe");
+    await expect(prompt).toHaveValue(/client_reference_id/);
+    await expect(prompt).toHaveValue(/\/api\/webhooks\/stripe\/\{connectionId\}/);
+    await expect(prompt).toHaveValue(/Phase 0: Inspect first \(read-only\)/);
+
+    const value = await prompt.inputValue();
+    expect(value).not.toMatch(/ts_(live|test)_[A-Za-z0-9]/);
+    expect(value).not.toMatch(/whsec_[A-Za-z0-9]/);
+    expect(value).not.toMatch(/ENCRYPTION_KEY/);
   });
 
   test("shows the settings changes in the audit log", async ({ page }) => {

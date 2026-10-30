@@ -10,7 +10,7 @@ export type AttributionOutcome =
   | "currency_mismatch"
   | "coupon_conflict";
 
-export type AttributedVia = "click" | "coupon" | "none";
+export type AttributedVia = "click" | "coupon" | "subscription" | "none";
 
 export interface ClickSnapshot {
   id: string;

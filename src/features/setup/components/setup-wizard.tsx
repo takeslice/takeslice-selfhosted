@@ -48,7 +48,7 @@ export function SetupWizard({ appUrl }: { appUrl: string }) {
           <Field label="Program name" htmlFor="programName" error={errors.programName} hint="Shown on the public partner page.">
             <Input id="programName" name="programName" required aria-invalid={Boolean(errors.programName)} />
           </Field>
-          <Field label="Program URL" htmlFor="programSlug" error={errors.programSlug} hint={`Your partner page: ${appUrl}/partners/p/`}>
+          <Field label="Program handle" htmlFor="programSlug" error={errors.programSlug} hint={`Identifies your program. Your public partner page is ${appUrl}/partners.`}>
             <Input id="programSlug" name="programSlug" placeholder="acme" required aria-invalid={Boolean(errors.programSlug)} />
           </Field>
           <Field label="Description" htmlFor="description" error={errors.description} hint="A short pitch for your program. Optional.">
@@ -73,7 +73,7 @@ export function SetupWizard({ appUrl }: { appUrl: string }) {
           <Field label="Confirm password" htmlFor="confirmPassword" error={errors.confirmPassword}>
             <Input id="confirmPassword" name="confirmPassword" type="password" autoComplete="new-password" required aria-invalid={Boolean(errors.confirmPassword)} />
           </Field>
-          <p className="text-sm text-muted-foreground">You can add more admins after setup.</p>
+          <p className="text-sm text-muted-foreground">This creates the only account with admin access. Keep its credentials safe.</p>
         </fieldset>
 
         <fieldset hidden={step !== 2} className="flex flex-col gap-4">
@@ -126,10 +126,10 @@ export function SetupWizard({ appUrl }: { appUrl: string }) {
         </fieldset>
 
         <fieldset hidden={step !== 3} className="flex flex-col gap-4">
-          <legend className="mb-2 text-lg font-semibold">Email (optional)</legend>
+          <legend className="mb-2 text-lg font-semibold">Email (recommended)</legend>
           <p className="text-sm text-muted-foreground">
-            Needed for verification codes, password resets and partner notifications. You can add it later, but partners will not
-            receive email until you do.
+            Required for partner sign-up verification, password resets and notifications. Without SMTP, partners cannot verify
+            their email or sign in. You can add it later under Settings, Email.
           </p>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="SMTP host" htmlFor="smtpHost" error={errors.smtpHost}>

@@ -26,7 +26,7 @@ export interface ProgramFormValues {
   recurringMode: "first_payment" | "months" | "lifetime";
   recurringMonths: number | null;
   approvalMode: "manual" | "auto";
-  couponMode: "disabled" | "manual" | "auto";
+  couponMode: "disabled" | "manual";
   attributionConflict: "click" | "coupon";
   minimumPayoutMinor: number;
 }
@@ -151,11 +151,10 @@ export function ProgramSettingsForm({ values }: { values: ProgramFormValues }) {
               <option value="auto">Approve automatically</option>
             </Select>
           </Field>
-          <Field label="Coupons" htmlFor="couponMode" error={errors.couponMode} hint="Automatic coupons require a provider connection that supports them.">
+          <Field label="Coupons" htmlFor="couponMode" error={errors.couponMode} hint="Codes are shown to approved affiliates after an admin creates them.">
             <Select id="couponMode" name="couponMode" defaultValue={values.couponMode}>
               <option value="disabled">Off</option>
               <option value="manual">Affiliate requests, admin creates</option>
-              <option value="auto">Create automatically</option>
             </Select>
           </Field>
           <Field

@@ -34,7 +34,7 @@ export const programSettingsSchema = z
     recurringMode: z.enum(["first_payment", "months", "lifetime"]).default("first_payment"),
     recurringMonths: z.coerce.number().int().min(1).max(60).optional(),
     approvalMode: z.enum(["manual", "auto"]).default("manual"),
-    couponMode: z.enum(["disabled", "manual", "auto"]).default("manual"),
+    couponMode: z.enum(["disabled", "manual"]).default("manual"),
     attributionConflict: z.enum(["click", "coupon"]).default("click"),
     minimumPayout: money,
   })

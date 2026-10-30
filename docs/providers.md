@@ -74,10 +74,12 @@ Deduplication uses the pair `(connection, provider_event_id)`. A provider redeli
 ### Stripe
 
 1. Add a secret key for the mode you are connecting. Test and live keys create separate connections.
-2. When `APP_URL` is a public HTTPS address, TakeSlice creates a webhook endpoint for `checkout.session.completed` and `invoice.paid` and stores the returned signing secret.
+2. When `APP_URL` is a public HTTPS address, TakeSlice creates a webhook endpoint for `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `charge.refunded` and `charge.dispute.created`, and stores the returned signing secret. Reconnect Stripe after upgrading from an older preview build so the endpoint subscribes to every event.
 3. For local development or a manually created endpoint, add the webhook in Stripe, then paste its `whsec_…` signing secret into TakeSlice instead.
 
 The first-party tracking script decorates Stripe Payment Links and Checkout links with `client_reference_id`. For a custom checkout, set `client_reference_id` to `window.TakeSlice.clickId()` or copy the `tscid` value from the landing URL.
+
+For subscriptions, Stripe sends both `checkout.session.completed` and an `invoice.paid` with `billing_reason=subscription_create` for the first payment. TakeSlice records the checkout session and ignores that first invoice; later invoices with `billing_reason=subscription_cycle` become renewal conversions.
 
 Stripe coupons:
 
@@ -122,7 +124,7 @@ Orders with `billing_reason: subscription_cycle` are marked as renewals.
 ### RevenueCat
 
 1. Create a webhook in RevenueCat.
-2. Set an `Authorization` header to a long random value and paste the same value into TakeSlice. The form stores the raw value; TakeSlice sends and expects `Bearer <value>`.
+2. Set the webhook's `Authorization` header to `Bearer <secret>`, using a long random secret. Paste only `<secret>` into TakeSlice. RevenueCat sends the header verbatim and TakeSlice compares it in constant time.
 3. Set the subscriber attribute `tscid`, or pass the click ID as `app_user_id`.
 4. Supported events: `INITIAL_PURCHASE`, `RENEWAL`, `NON_RENEWING_PURCHASE`.
 
@@ -142,7 +144,29 @@ Discount codes are used for coupon attribution when no click ID is present.
 2. Paste the webhook secret.
 3. Put `tscid` in the order metadata.
 
-Only `processing` and `completed` orders are recorded. `date_created_gmt` is treated as UTC.
+Only `processing` and `completed` orders are recorded. `date_created_gmt` is treated as UTC. Order metadata with `ts_renewal` set to `true` records a renewal.
+
+## Refunds and chargebacks
+
+Stripe signed refunds and disputes are connected to the commission lifecycle. A partial refund reduces the commission proportionally; a full refund declines a pending commission or reverses an approved or available one. A refund after payout creates a negative adjustment rather than rewriting paid history. Repeating a provider refund event is a no-op.
+
+Only Stripe currently maps signed refund events. For Paddle, Lemon Squeezy, Dodo Payments, Polar, RevenueCat, Shopify and WooCommerce, call the refund API from your backend when a refund is confirmed:
+
+```bash
+curl -X POST https://affiliates.example.com/api/v1/refunds \
+  -H "Authorization: Bearer ts_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "commissionId": "com_...",
+    "refundId": "refund_123",
+    "amountMinor": 4900,
+    "currency": "EUR"
+  }'
+```
+
+Set `"kind": "chargeback"` for a dispute. The `refundId` is your idempotency key; repeating it never applies the refund twice. Amounts are in minor units and must match the commission currency.
+
+The commission ID is returned when the conversion is accepted by `POST /api/v1/conversions`, and appears on the commission detail page. If your backend does not store it, find the conversion in the dashboard before reporting the refund. There is no conversion-lookup API.
 
 ## Test mode
 
@@ -166,6 +190,8 @@ To verify idempotency, resend an already accepted event unchanged. TakeSlice ret
 | `401` | The pasted signing secret belongs to a different webhook endpoint or mode. Re-copy it from the provider. |
 | `400` invalid payload | The provider event does not contain an amount, currency, time, and transaction ID, or the event is malformed. |
 | Conversion recorded but unattributed | The checkout did not include `tscid`, and no valid coupon was present. Check the provider-specific field in the click attribution table. |
+| Refund returns `404` | The commission ID is wrong, belongs to test mode while you used a live key (or the reverse), or does not exist. |
+| Refund returns `duplicate: true` | That `refundId` was already applied. Use a new ID for a new refund event. |
 | `503` | Complete the program setup wizard before sending webhooks. |
 | Stripe webhook was not created | `APP_URL` must be public HTTPS. For localhost, create the Stripe endpoint manually and paste its signing secret. |
 | Stripe coupon sync failed | Confirm the live Stripe connection is active and the secret key can manage coupons and promotion codes. Retry from the coupons page. |

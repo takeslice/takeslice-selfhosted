@@ -222,7 +222,7 @@ function fixtures(clickId: string, currency: string, suffix: string): ProviderFi
       headers: {
         "content-type": "application/json",
         "x-wc-webhook-topic": "order.updated",
-        "x-wc-webhook-id": `evt_woo_${suffix}`,
+        "x-wc-webhook-delivery-id": `evt_woo_${suffix}`,
         "x-wc-webhook-signature": createHmac("sha256", wooSecret).update(wooBody).digest("base64"),
       },
     },

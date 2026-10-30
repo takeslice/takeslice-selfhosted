@@ -2,7 +2,7 @@
 
 **Your affiliate program. Your infrastructure. Your rules.**
 
-TakeSlice is an open-source, self-hosted affiliate management platform for SaaS businesses and online products. Run your own affiliate program, review applications, issue referral links and coupon codes, track attributed sales, and keep every record in your own database.
+TakeSlice is an open-source, self-hosted affiliate management platform for SaaS businesses and online products. Run your own affiliate program, review applications, issue referral links and coupon codes, track attributed sales, manage commissions and refunds, and pay affiliates manually — with every record in your own PostgreSQL database.
 
 No marketplace. No platform fee. No shared tenancy. No npm package or cloud account required.
 
@@ -10,7 +10,7 @@ No marketplace. No platform fee. No shared tenancy. No npm package or cloud acco
 
 Licensed under AGPL-3.0-only.
 
-> **Project status:** early development. Setup, affiliate management, tracking, conversion ingestion, and provider webhooks are implemented. Commission calculation, refunds, payouts, and reporting are the next milestones. See [Roadmap](#roadmap) before using this in production.
+> **Project status:** release candidate. The core loop is implemented, audited and covered by end-to-end tests against PostgreSQL: setup, affiliate applications, tracking, provider webhooks, commission lifecycle, refunds, manual payouts, and the partner earnings view. It is suitable for a controlled production pilot after a full test-mode cycle. Reporting, embedded referrals and some provider-specific refund events are still on the roadmap, and only Stripe has been exercised against a real provider sandbox so far.
 
 ---
 
@@ -60,9 +60,11 @@ The first-party tracking script stores the click ID and decorates Stripe Payment
 
 TakeSlice checks the click, mode, attribution window, currency, and coupon rules, then records an immutable conversion and attribution outcome.
 
-### 5. Track performance
+### 5. Commission to payout
 
-The dashboard shows affiliates, applications, coupons, provider deliveries, and recent activity. Commission calculation, validation periods, refunds, and payouts are being built in the next milestones.
+Every credited live sale gets a pending commission with the rate, currency, and validation end frozen at attribution time. A background worker moves it through validation and the holding period, making it available for payout. Refunds and chargebacks reduce, decline, or reverse the commission; after a payout they create a negative adjustment instead of rewriting paid history.
+
+You create a payout for available items, transfer the money externally, and mark it paid with a reference. The affiliate sees the payout in their earnings page and receives an email.
 
 ## Features Available Today
 
@@ -70,12 +72,13 @@ The dashboard shows affiliates, applications, coupons, provider deliveries, and 
 
 - Four-step first-run wizard with a one-time, rate-limited setup token.
 - One instance per business. Roles are `admin` and `affiliate`.
-- Program settings: name, public slug, currency, commission defaults, attribution window, validation period, approval mode, coupon mode, and minimum payout.
+- Program settings: name, public slug, currency, commission defaults, attribution window, validation period, holding period, recurring mode, approval mode, coupon mode, and minimum payout.
 - Branding: logo, brand color, program description, and optional white-label mode.
 - SMTP settings with a test email and a development outbox.
 - Custom application questions.
 - Admin audit log.
 - API key management with live and test modes.
+- AI Setup prompt generator for Cursor, Claude Code, Codex and other coding agents.
 
 ### Affiliates and applications
 
@@ -83,8 +86,8 @@ The dashboard shows affiliates, applications, coupons, provider deliveries, and 
 - Email verification and password reset.
 - Application review with approve, reject, suspend, and reactivate actions.
 - Manual affiliate creation.
-- Affiliate detail pages and internal notes.
-- Affiliate dashboard with referral links.
+- Affiliate detail pages, internal notes, commission overrides, payout details, and balance.
+- Affiliate dashboard with referral links, channel links with UTM parameters, coupons, and an earnings page.
 
 ### Links, coupons, and tracking
 
@@ -94,7 +97,29 @@ The dashboard shows affiliates, applications, coupons, provider deliveries, and 
 - First-party `takeslice.js` tracking script served by the application.
 - Click API for custom storefronts.
 - Conversion API with Bearer API keys, test mode, idempotency, and explicit attribution outcomes.
-- Attribution outcomes for valid clicks, unknown clicks, expired clicks, wrong mode, currency mismatch, and coupon conflicts.
+- Attribution outcomes for valid clicks, unknown clicks, expired clicks, wrong mode, and currency mismatch, plus coupon fallback rules.
+
+### Commissions and refunds
+
+- Percentage or fixed commissions, frozen at attribution time.
+- Per-affiliate rate overrides.
+- Recurring commission modes: first payment, a bounded number of months, or lifetime.
+- Validation and holding periods with a PostgreSQL-backed worker.
+- Explicit lifecycle: pending, approved, available, paid, declined, reversed.
+- Append-only commission history, ledger entries, and audit records.
+- Admin decline and reverse actions with a required reason.
+- Idempotent refunds and chargebacks, including partial refunds, full refunds, and refunds after payout.
+- Refund API for any provider flow that does not deliver signed refund events.
+
+### Payouts
+
+- Manual payouts only: TakeSlice records the transfer, it does not move money itself.
+- Available-balance calculation with active adjustments.
+- Payout items reserve commissions and adjustments so nothing can be paid twice.
+- Mark paid with a reference, or cancel to release the reserved items.
+- Affiliate payout details stored encrypted with AES-256-GCM.
+- Partner payout history and lifecycle explanation.
+- Email and in-app notifications when a commission becomes available and when a payout is sent.
 
 ### Payment-provider webhooks
 
@@ -102,14 +127,15 @@ The dashboard shows affiliates, applications, coupons, provider deliveries, and 
 - Encrypted provider credentials and signing secrets.
 - Stripe webhook endpoint creation when `APP_URL` is a public HTTPS address.
 - Provider event log with processed, ignored, deferred, and duplicate outcomes.
-- Raw-body signature verification, timestamp tolerance, and a 1 MB payload cap.
+- Raw-body signature verification, timestamp tolerance where the provider supplies a timestamp, and a 1 MB payload cap.
 - Stripe promotion-code creation when a coupon has a discount percentage and Stripe is connected in live mode.
+- Stripe refund and dispute events connected to the commission lifecycle.
 
 ### Payment Provider Integrations
 
 | Provider | Webhook events | Notes |
 |---|---|---|
-| Stripe | `checkout.session.completed`, `invoice.paid` | Automatic webhook creation and coupon sync. |
+| Stripe | `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `invoice.paid`, `charge.refunded`, `charge.dispute.created` | Automatic webhook creation, coupon sync, refunds and chargebacks. |
 | Paddle | `transaction.completed` | Recurring transactions are marked as renewals. |
 | Lemon Squeezy | `order_created`, `subscription_payment_success` | Subscription payments are marked as renewals. |
 | Dodo Payments | `payment.succeeded`, `subscription.renewed` | Standard Webhooks signature format. |
@@ -118,18 +144,17 @@ The dashboard shows affiliates, applications, coupons, provider deliveries, and 
 | Shopify | `orders/paid` | Reads `tscid` from note attributes or `landing_site`. |
 | WooCommerce | `order.created`, `order.updated` | Records paid orders only. |
 
-All adapters verify provider signatures and deduplicate deliveries. Refund and chargeback handling is not yet connected to commissions. Detailed setup, signature, click-parameter, and troubleshooting notes are in [docs/providers.md](docs/providers.md).
+All adapters verify provider signatures and deduplicate deliveries. Only Stripe currently maps signed refund and chargeback events; for other providers use `POST /api/v1/refunds` from your backend. Detailed setup, signature, click-parameter, and troubleshooting notes are in [docs/providers.md](docs/providers.md).
 
 ## Roadmap
 
-The core loop is being built in milestones:
+The core loop is implemented. Remaining work, in priority order:
 
-- **Done:** project scaffold, Docker deployment, setup wizard, authentication, admin settings, affiliate portal and applications, referral links, coupons, click tracking, conversion API, attribution, eight provider webhooks, event log.
-- **Next:** commission calculation and overrides, validation and holding periods, recurring commissions, refunds and chargebacks, adjustments, commission status history, ledger.
-- **Then:** affiliate balances, manual payouts, overview metrics and charts, CSV export.
-- **Release:** security hardening, full end-to-end coverage, accessibility and responsive pass, operations documentation, clean-clone Docker test.
+- **Next:** integration diagnostics with a test event workflow, embedded Refer & Earn widget and signed embed tokens, customer referral registration API for apps without a full partner account, provider refund events beyond Stripe, reporting with date ranges and CSV export.
+- **Later:** automatic affiliate coupon assignment, scheduled autopay or Stripe Connect, additional admin seats and roles, multi-currency, creative library, outbound webhooks and a documented OpenAPI schema, email template editing, i18n, fraud scoring.
+- **Not planned for the core release:** affiliate marketplace or partner discovery, AI prospecting, cloud licensing, telemetry, or any dependency on the hosted TakeSlice product.
 
-Not yet implemented: commission records, payout records, performance reports, automatic affiliate coupon assignment, email notification jobs beyond authentication and setup email, and scheduled background jobs. The worker container currently provides the queue loop and database health check.
+Not yet implemented: overview charts and period reports, CSV export, automatic payouts, multi-currency, embedded iframe widget, customer referral API, and automatic coupon assignment. The worker handles commission maturity and queued email; it does not run provider reconciliation.
 
 ---
 
@@ -150,22 +175,29 @@ git clone https://github.com/takeslice/takeslice-selfhosted.git
 cd takeslice-selfhosted
 ```
 
-### 2. Configure the environment
+### 2. Generate the environment
 
 ```bash
-cp .env.example .env
+./scripts/init-env.sh
 ```
 
-Set at minimum:
+Pass your public URL to set `APP_URL` at the same time:
 
-```env
-POSTGRES_PASSWORD=replace-with-a-long-random-password
-APP_URL=http://localhost:3000
+```bash
+./scripts/init-env.sh https://affiliates.example.com
 ```
 
-For a public deployment, `APP_URL` must be the public HTTPS address, for example `https://affiliates.yourcompany.com`. Leave `BETTER_AUTH_SECRET` and `ENCRYPTION_KEY` empty to have them generated into the persistent `app-data` volume on first boot, or provide your own 32-byte base64 values.
+The script refuses to overwrite an existing `.env`. It generates:
 
-Do not deploy with the example database password.
+- a random PostgreSQL password
+- a 32-byte `BETTER_AUTH_SECRET`
+- a 32-byte `ENCRYPTION_KEY` used for provider credentials, SMTP passwords, and payout details
+
+Keep `.env` and the `app-data` volume together. Losing `ENCRYPTION_KEY` makes stored provider credentials and payout details unreadable.
+
+If you prefer to write `.env` yourself, copy `.env.example` and fill in every value. Compose refuses to start while `POSTGRES_PASSWORD` is empty.
+
+Do not deploy with an example or shared database password.
 
 ### 3. Start TakeSlice
 
@@ -219,7 +251,54 @@ curl -X POST https://affiliates.yourcompany.com/api/v1/conversions \
 
 `amountMinor` is an integer in the currency's smallest unit. API keys are secrets and must only be used from trusted server code.
 
+Report a refund with the same API key:
+
+```bash
+curl -X POST https://affiliates.yourcompany.com/api/v1/refunds \
+  -H "Authorization: Bearer ts_live_..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "commissionId": "com_...",
+    "refundId": "refund_123",
+    "amountMinor": 4900,
+    "currency": "EUR"
+  }'
+```
+
+Repeating a `refundId` is safe and returns `duplicate: true`.
+
 Alternatively, connect a supported payment provider under **Providers** and use its signed webhooks. Provider delivery URLs are shown on the provider page.
+
+Start with **test mode** for a new connection, complete a test purchase, and confirm the event appears under **Providers → Events** and the commission appears under **Commissions** with a Test badge. Test commissions never create money.
+
+## Integrate with AI
+
+TakeSlice can generate an integration prompt for Cursor, Claude Code, Codex or another coding agent. The prompt is built locally in your instance from the instance URL, the provider you select and the integration pieces you enable. No source code or prompt is sent to an AI service.
+
+1. Sign in to the dashboard as an administrator.
+2. Open **Settings > AI Setup**.
+3. Select the payment provider your application uses and the integration requirements.
+4. Click **Copy prompt** and paste it into the coding agent.
+5. Work through the verification checklist on the page. A connected provider is not the same as a verified integration.
+
+The generated prompt tells the agent to inspect your authentication, signup, checkout and payment-provider flows before editing them. It uses the real endpoints in this release: `/r/{code}`, `/takeslice.js`, `window.TakeSlice`, `POST /api/v1/conversions` and `POST /api/v1/refunds`. It also states that this release has no embedded affiliate-dashboard, commission or payout API.
+
+The prompt never includes API keys, provider signing secrets, database credentials, `ENCRYPTION_KEY` or the setup token. Do not add them after copying it.
+
+If you want to start outside the dashboard, this starter prompt is safe to copy:
+
+```text
+You are integrating TakeSlice Self-Hosted into my existing application.
+
+Read these public resources first:
+- https://github.com/takeslice/takeslice-selfhosted
+- https://github.com/takeslice/takeslice-selfhosted/blob/main/docs/ai-integration.md
+- https://github.com/takeslice/takeslice-selfhosted/blob/main/docs/providers.md
+
+Then inspect my application read-only and report how authentication, signup, checkout, payment confirmation and webhooks work. Do not edit anything yet. Do not ask me for API keys, signing secrets, database credentials or setup tokens. Wait for the tailored prompt from my TakeSlice instance.
+```
+
+The full guide, provider field matrix, verification checklist and troubleshooting are in [docs/ai-integration.md](docs/ai-integration.md).
 
 ---
 
@@ -238,9 +317,11 @@ Set:
 ```env
 APP_URL=https://affiliates.yourcompany.com
 TRUST_PROXY=true
+# Optional: the proxy's own CIDR, so only its forwarded hops are trusted.
+TRUSTED_PROXY_CIDRS=127.0.0.1/32,::1/128,172.18.0.0/16
 ```
 
-Only enable `TRUST_PROXY` when the app is behind a properly configured trusted reverse proxy. Forward the original host and client IP headers, and do not expose PostgreSQL publicly.
+Only enable `TRUST_PROXY` when the app is behind a properly configured trusted reverse proxy that appends the client address to `X-Forwarded-For`. `TRUSTED_PROXY_CIDRS` defaults to loopback and private ranges and should be narrowed to the proxy's actual network. Do not expose PostgreSQL publicly.
 
 ### Volumes
 
@@ -277,7 +358,7 @@ pnpm install
 cp .env.example .env
 ```
 
-Point `DATABASE_URL` at a local PostgreSQL instance. For Compose, database settings come from `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`; for local development, edit `DATABASE_URL` directly.
+Point `DATABASE_URL` at a local PostgreSQL instance and set `BETTER_AUTH_SECRET` and `ENCRYPTION_KEY`. For Compose, database settings come from `POSTGRES_USER`, `POSTGRES_PASSWORD`, and `POSTGRES_DB`; for local development, edit `DATABASE_URL` directly.
 
 ```bash
 pnpm db:migrate
@@ -299,6 +380,8 @@ pnpm test
 pnpm test:e2e
 ```
 
+The end-to-end suite needs a running instance plus `DATABASE_URL`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`, and `ENCRYPTION_KEY`. Tests that need provider fixtures also need `ENCRYPTION_KEY`; the affiliate flow reads queued email from `EMAIL_OUTBOX_DIR`. See [docs/development.md](docs/development.md) for the full test environment, the worker, and debugging notes.
+
 | Component | Technology |
 |---|---|
 | Framework | Next.js App Router |
@@ -310,20 +393,22 @@ pnpm test:e2e
 | Background jobs | PostgreSQL-backed worker |
 | Deployment | Docker Compose |
 
-Background jobs use PostgreSQL locking with `FOR UPDATE SKIP LOCKED`, so no Redis instance is required. Job handlers arrive with the commission milestone.
+Background jobs use PostgreSQL locking with `FOR UPDATE SKIP LOCKED`, so no Redis instance is required. The worker matures commissions and delivers queued email.
 
 ---
 
 ## Security Notes
 
-- Provider credentials and SMTP passwords are encrypted with AES-256-GCM.
+- Provider credentials, SMTP passwords, and payout details are encrypted with AES-256-GCM.
 - Webhook signatures are verified against the raw request body in constant time.
 - Webhook payloads are capped at 1 MB.
 - Admin and affiliate actions are authorized server-side; client-side hiding is never authorization.
-- Setup and authentication endpoints are rate-limited.
+- Setup, authentication, webhook, and refund endpoints are rate-limited.
 - Uploaded images are validated and re-encoded; SVG uploads are rejected.
+- CSP, HSTS, nosniff, frame denial, referrer, and permissions-policy headers are set by the application.
+- Commission history, the ledger, and the audit log are append-only.
 
-Report suspected vulnerabilities privately rather than opening a public issue.
+Report suspected vulnerabilities privately rather than opening a public issue. See [SECURITY.md](SECURITY.md).
 
 ---
 
@@ -349,9 +434,20 @@ Yes. They can apply through `/partners`, and you approve or decline applications
 
 No. Connect a supported provider through signed webhooks, or send conversions from your backend through the API.
 
+### Does TakeSlice pay affiliates automatically?
+
+No. Payouts are manual: TakeSlice calculates the available balance, reserves the items in a payout, and records the external transfer when you mark it paid. Automatic payouts are on the roadmap.
+
 ### Is it production ready?
 
-Not yet. The tracking and provider layer is usable, but commission calculation, refunds, and payouts are still in progress. Treat the current release as an early preview.
+Yes for a controlled single-business deployment. The core loop has been audited end to end: setup, attribution, commission maturity, refunds, manual payouts, authorization, webhook verification and idempotency all pass against a real PostgreSQL database.
+
+Two caveats before handling live money:
+
+- Only Stripe has been tested against a real payment-provider sandbox. The other seven adapters are verified against recorded fixtures and signature contracts, so run a test-mode transaction with your own provider first.
+- Reporting and CSV export, embedded referrals and non-Stripe refund webhooks are not implemented yet; see the [Roadmap](#roadmap).
+
+Run a full test-mode cycle, back up your data, configure HTTPS and email, and review [SECURITY.md](SECURITY.md) before switching to live mode.
 
 ### Can I customize the source?
 
@@ -361,7 +457,7 @@ Yes, subject to AGPL-3.0-only.
 
 ## Contributing
 
-Contributions are welcome: bug fixes, documentation, provider improvements, and feature work. Open an issue or submit a pull request.
+Contributions are welcome: bug fixes, documentation, provider improvements, and feature work. Read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request.
 
 [Issues](https://github.com/takeslice/takeslice-selfhosted/issues) · [Pull requests](https://github.com/takeslice/takeslice-selfhosted/pulls)
 

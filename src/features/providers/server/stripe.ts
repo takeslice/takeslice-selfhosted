@@ -52,6 +52,12 @@ async function stripeRequest(path: string, secretKey: string, init: RequestInit 
   return body;
 }
 
+/** Live and test keys have distinct prefixes; the selected connection mode must match. */
+export function stripeKeyMode(secretKey: string): "live" | "test" | null {
+  const match = secretKey.trim().match(/^(?:sk|rk)_(live|test)_/);
+  return match ? (match[1] as "live" | "test") : null;
+}
+
 export async function validateStripeKey(secretKey: string): Promise<boolean> {
   await stripeRequest("/account", secretKey);
   return true;

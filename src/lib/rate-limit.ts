@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { rateLimit } from "@/lib/db/schema";
+import { hmacSha256Hex } from "@/lib/crypto";
 import { newId } from "@/lib/ids";
 
 export interface RateLimitResult {
@@ -12,9 +13,11 @@ export interface RateLimitResult {
 
 /**
  * Fixed-window limiter backed by the shared database, so every app replica sees the same
- * counter. Keys are hashed by the caller before they contain an address or key prefix.
+ * counter. Keys are keyed-hashed here so raw addresses, account identifiers and key
+ * prefixes are never stored.
  */
 export async function checkRateLimit(key: string, limit: number, windowSeconds: number): Promise<RateLimitResult> {
+  const storageKey = `rl:${hmacSha256Hex(key)}`;
   const now = Date.now();
   const windowMs = windowSeconds * 1000;
   const cutoff = now - windowMs;
@@ -22,7 +25,7 @@ export async function checkRateLimit(key: string, limit: number, windowSeconds: 
   try {
     const [row] = await db
       .insert(rateLimit)
-      .values({ id: newId("rl"), key, count: 1, lastRequest: now })
+      .values({ id: newId("rl"), key: storageKey, count: 1, lastRequest: now })
       .onConflictDoUpdate({
         target: rateLimit.key,
         set: {

@@ -22,9 +22,10 @@ export function Card({ className, ...props }: ComponentProps<"div">) {
   return <div className={cn("rounded-xl border bg-card p-6 shadow-xs", className)} {...props} />;
 }
 
-export function Alert({ tone = "info", children }: { tone?: "info" | "error" | "success"; children: ReactNode }) {
+export function Alert({ tone = "info", children }: { tone?: "info" | "warning" | "error" | "success"; children: ReactNode }) {
   const tones = {
     info: "border-border bg-muted/50 text-foreground",
+    warning: "border-amber-500/30 bg-amber-500/5 text-foreground",
     error: "border-destructive/30 bg-destructive/5 text-destructive",
     success: "border-success/30 bg-success/5 text-foreground",
   } as const;

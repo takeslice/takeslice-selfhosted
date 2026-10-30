@@ -44,7 +44,7 @@ export function PartnerSignupForm() {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+    <form method="post" onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       {error && <Alert tone="error">{error}</Alert>}
       <Field label="Your name" htmlFor="name">
         <Input id="name" name="name" autoComplete="name" required />

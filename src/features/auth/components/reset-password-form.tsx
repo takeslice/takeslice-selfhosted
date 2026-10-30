@@ -37,7 +37,7 @@ export function ResetPasswordForm({ initialEmail, sent }: { initialEmail: string
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+    <form method="post" onSubmit={submit} className="flex flex-col gap-4" noValidate>
       {sent && <Alert tone="success">If an account exists for that address, a reset code is on its way.</Alert>}
       {error && <Alert tone="error">{error}</Alert>}
       <Field label="Email" htmlFor="reset-email">

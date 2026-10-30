@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-takeslice}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-takeslice}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/init-env.sh to create .env first}
       POSTGRES_DB: ${POSTGRES_DB:-takeslice}
     volumes:
       - db-data:/var/lib/postgresql/data
@@ -21,7 +21,7 @@ services:
       context: .
       target: migrator
     environment:
-      DATABASE_URL: "postgres://${POSTGRES_USER:-takeslice}:${POSTGRES_PASSWORD:-takeslice}@db:5432/${POSTGRES_DB:-takeslice}"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-takeslice}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-takeslice}"
     depends_on:
       db:
         condition: service_healthy
@@ -33,12 +33,13 @@ services:
       target: runner
     restart: unless-stopped
     environment:
-      DATABASE_URL: "postgres://${POSTGRES_USER:-takeslice}:${POSTGRES_PASSWORD:-takeslice}@db:5432/${POSTGRES_DB:-takeslice}"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-takeslice}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-takeslice}"
       APP_URL: ${APP_URL:-http://localhost:3000}
       SETUP_TOKEN: ${SETUP_TOKEN:-}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       TRUST_PROXY: ${TRUST_PROXY:-false}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       DATA_DIR: /app/data
     volumes:
@@ -61,9 +62,10 @@ services:
       context: .
       target: migrator
     restart: unless-stopped
-    command: ["node", "scripts/worker.mjs"]
+    command: ["node", "--conditions=react-server", "--import", "tsx", "scripts/worker.ts"]
     environment:
-      DATABASE_URL: "postgres://${POSTGRES_USER:-takeslice}:${POSTGRES_PASSWORD:-takeslice}@db:5432/${POSTGRES_DB:-takeslice}"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-takeslice}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-takeslice}"
+      APP_URL: ${APP_URL:-http://localhost:3000}
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:-}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
       DATA_DIR: /app/data

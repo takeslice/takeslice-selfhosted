@@ -38,7 +38,9 @@ export const wooCommerceAdapter: ProviderAdapter = {
     const payload = parseJson(rawBody);
     if (!payload) return { kind: "invalid", reason: "WooCommerce sent invalid JSON." };
     const type = text(headers.get("x-wc-webhook-topic")) ?? "order.updated";
-    const providerEventId = eventId(headers.get("x-wc-webhook-id") ?? headers.get("x-wc-webhook-delivery-id"), rawBody);
+    // x-wc-webhook-id identifies the webhook itself; x-wc-webhook-delivery-id is unique per delivery.
+    // Falling back to the body hash keeps every distinct order unique when the delivery header is absent.
+    const providerEventId = eventId(headers.get("x-wc-webhook-delivery-id"), rawBody);
     if (type !== "order.created" && type !== "order.updated") {
       return { kind: "ignored", providerEventId, type, reason: "Only order events create a conversion." };
     }

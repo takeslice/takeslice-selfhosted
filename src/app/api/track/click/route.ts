@@ -5,7 +5,7 @@ import { clickRequestSchema } from "@/features/tracking/schemas";
 import { recordClick, resolveReferral } from "@/features/tracking/server/clicks";
 import { newId } from "@/lib/ids";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { clientAddress, referrerHost, truncate } from "@/lib/request";
+import { clientAddress, readBoundedBody, referrerHost, trackingRateLimitKey, truncate } from "@/lib/request";
 
 const MAX_BODY_BYTES = 16 * 1024;
 
@@ -37,20 +37,15 @@ export async function POST(request: Request) {
     return Response.json({ error: "Origin not allowed." }, { status: 403 });
   }
 
-  const rate = await checkRateLimit(`click-direct:${clientAddress(request.headers)}`, 300, 60);
-  if (!rate.allowed) return rateLimitResponse(rate);
-
-  const declaredLength = Number(request.headers.get("content-length") ?? "0");
-  if (declaredLength > MAX_BODY_BYTES) return Response.json({ error: "Request body is too large." }, { status: 413 });
-
-  const body = await request.text();
-  if (Buffer.byteLength(body, "utf8") > MAX_BODY_BYTES) {
-    return Response.json({ error: "Request body is too large." }, { status: 413 });
+  const body = await readBoundedBody(request, MAX_BODY_BYTES);
+  if (!body.ok) {
+    const status = body.reason === "too_large" ? 413 : 400;
+    return Response.json({ error: body.reason === "too_large" ? "Request body is too large." : "The body could not be read." }, { status, headers: cors(origin) });
   }
 
   let json: unknown;
   try {
-    json = JSON.parse(body);
+    json = JSON.parse(body.body);
   } catch {
     return Response.json({ error: "Send a JSON object." }, { status: 400, headers: cors(origin) });
   }
@@ -59,6 +54,11 @@ export async function POST(request: Request) {
   if (!parsed.success) {
     return Response.json({ error: parsed.error.issues[0]?.message ?? "Check the click fields." }, { status: 400, headers: cors(origin) });
   }
+
+  // The ref is not validated until after the limit. Keep it out of the bucket key.
+  const bucket = trackingRateLimitKey("click-direct", request.headers);
+  const rate = await checkRateLimit(bucket.key, bucket.shared ? 3_000 : 300, 60);
+  if (!rate.allowed) return rateLimitResponse(rate);
 
   const referral = await resolveReferral(parsed.data.ref, settings.websiteUrl);
   if (!referral || !referral.earning) {

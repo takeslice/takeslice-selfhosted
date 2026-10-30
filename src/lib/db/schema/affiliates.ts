@@ -8,10 +8,14 @@ export const affiliate = pgTable(
   "affiliate",
   {
     id: text("id").primaryKey(),
+    /** Partners sign in. Customer referrers are created by the business and have no user. */
     userId: text("user_id")
-      .notNull()
       .unique()
       .references(() => user.id, { onDelete: "cascade" }),
+    kind: text("kind", { enum: ["partner", "customer"] }).notNull().default("partner"),
+    /** Stable business-side identifier for a customer referrer (for example a Stripe customer ID). */
+    externalId: text("external_id").unique(),
+    contactEmail: text("contact_email"),
     displayName: text("display_name").notNull(),
     websiteUrl: text("website_url"),
     country: text("country"),
@@ -22,6 +26,10 @@ export const affiliate = pgTable(
     referralCode: text("referral_code").unique(),
     /** Basis points. Overrides the program rate for this affiliate when set. */
     commissionOverrideBps: integer("commission_override_bps"),
+    /** Encrypted with the instance key. Never returned in lists or logs. */
+    payoutMethod: text("payout_method", { enum: ["paypal", "bank_transfer", "wise", "other"] }),
+    payoutDetailsEncrypted: text("payout_details_encrypted"),
+    payoutDetailsUpdatedAt: timestamp("payout_details_updated_at", { withTimezone: true }),
     notes: text("notes").notNull().default(""),
     approvedAt: timestamp("approved_at", { withTimezone: true }),
     rejectedAt: timestamp("rejected_at", { withTimezone: true }),
@@ -35,7 +43,17 @@ export const affiliate = pgTable(
   },
   (table) => [
     index("affiliate_status_idx").on(table.status),
+    index("affiliate_kind_idx").on(table.kind),
     check("affiliate_override_check", sql`${table.commissionOverrideBps} is null or ${table.commissionOverrideBps} between 0 and 10000`),
+    check("affiliate_kind_check", sql`${table.kind} in ('partner', 'customer')`),
+    check(
+      "affiliate_identity_check",
+      sql`(${table.kind} = 'partner' and ${table.userId} is not null) or (${table.kind} = 'customer' and ${table.externalId} is not null)`,
+    ),
+    check(
+      "affiliate_payout_method_check",
+      sql`${table.payoutMethod} is null or ${table.payoutMethod} in ('paypal', 'bank_transfer', 'wise', 'other')`,
+    ),
   ],
 );
 

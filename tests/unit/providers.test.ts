@@ -4,10 +4,12 @@ import { dodoAdapter } from "@/features/providers/adapters/dodo";
 import { lemonSqueezyAdapter } from "@/features/providers/adapters/lemonsqueezy";
 import { paddleAdapter } from "@/features/providers/adapters/paddle";
 import { polarAdapter } from "@/features/providers/adapters/polar";
+import { adapterFor } from "@/features/providers/adapters";
 import { revenueCatAdapter } from "@/features/providers/adapters/revenuecat";
 import { shopifyAdapter } from "@/features/providers/adapters/shopify";
 import { stripeAdapter } from "@/features/providers/adapters/stripe";
 import { wooCommerceAdapter } from "@/features/providers/adapters/woocommerce";
+import { PROVIDERS } from "@/features/providers/constants";
 import { hmacBase64, hmacHex } from "@/features/providers/signatures";
 
 const click = "clk_e2etest1234";
@@ -25,6 +27,14 @@ function standardHeaders(body: string, rawSecret: string, id = "evt_standard_1")
     "webhook-signature": `v1,${signature}`,
   });
 }
+
+describe("provider configuration", () => {
+  it("keeps connect-form events in sync with every adapter", () => {
+    for (const provider of PROVIDERS) {
+      expect([...provider.webhookEvents].sort(), provider.id).toEqual([...adapterFor(provider.id).webhookEvents].sort());
+    }
+  });
+});
 
 describe("Stripe adapter", () => {
   const secret = "whsec_stripe_fixture";
@@ -60,11 +70,93 @@ describe("Stripe adapter", () => {
     });
   });
 
+  it("prefers client_reference_id over metadata as documented", () => {
+    const raw = JSON.stringify({
+      ...JSON.parse(body),
+      data: {
+        object: {
+          ...JSON.parse(body).data.object,
+          client_reference_id: click,
+          metadata: { tscid: "clk_metadatavaluethatisvalid" },
+        },
+      },
+    });
+    expect(stripeAdapter.parse(raw, new Headers())).toMatchObject({ kind: "conversion", clickId: click });
+  });
+
+  it("maps refund and dispute events", () => {
+    const refund = JSON.stringify({
+      id: "evt_refund_1",
+      type: "charge.refunded",
+      created: 1_793_395_200,
+      data: { object: { id: "ch_1", payment_intent: "pi_1", currency: "eur", amount_refunded: 1200 } },
+    });
+    expect(stripeAdapter.parse(refund, new Headers())).toMatchObject({
+      kind: "refund",
+      amountMinor: 1200,
+      cumulative: true,
+      refundKind: "refund",
+      paymentReference: "pi_1",
+    });
+
+    const dispute = JSON.stringify({
+      id: "evt_dispute_1",
+      type: "charge.dispute.created",
+      created: 1_793_395_200,
+      data: { object: { id: "dp_1", charge: "ch_1", currency: "eur", amount: 1200 } },
+    });
+    expect(stripeAdapter.parse(dispute, new Headers())).toMatchObject({
+      kind: "refund",
+      amountMinor: 1200,
+      cumulative: false,
+      refundKind: "chargeback",
+      paymentReference: "ch_1",
+    });
+  });
+
   it("rejects a changed body and ignores unpaid sessions", () => {
     const headers = stripeHeaders(body, secret);
     expect(stripeAdapter.verify(`${body} `, headers, secret)).toBe(false);
     const unpaid = body.replace('"payment_status":"paid"', '"payment_status":"unpaid"');
     expect(stripeAdapter.parse(unpaid, headers).kind).toBe("ignored");
+  });
+
+  function invoice(billingReason: string) {
+    return JSON.stringify({
+      id: `evt_invoice_${billingReason}`,
+      type: "invoice.paid",
+      created: 1_793_395_200,
+      data: {
+        object: {
+          id: `in_${billingReason}`,
+          status: "paid",
+          billing_reason: billingReason,
+          amount_paid: 4900,
+          currency: "eur",
+          payment_intent: "pi_invoice_1",
+          subscription: "sub_1",
+          metadata: {},
+        },
+      },
+    });
+  }
+
+  it("ignores the first invoice because checkout already recorded it", () => {
+    const raw = invoice("subscription_create");
+    expect(stripeAdapter.parse(raw, stripeHeaders(raw, secret))).toMatchObject({ kind: "ignored", type: "invoice.paid" });
+  });
+
+  it("maps a renewal invoice", () => {
+    const raw = invoice("subscription_cycle");
+    const result = stripeAdapter.parse(raw, new Headers());
+    expect(result).toMatchObject({
+      kind: "conversion",
+      externalId: "in_subscription_cycle",
+      amountMinor: 4900,
+      renewal: true,
+      subscriptionRef: "sub_1",
+      paymentReference: "pi_invoice_1",
+    });
   });
 });
 
@@ -245,6 +337,15 @@ describe("Shopify adapter", () => {
       couponCode: "PAT20",
     });
   });
+
+  it("reads the click ID from a relative landing_site", () => {
+    const raw = JSON.stringify({
+      ...JSON.parse(body),
+      note_attributes: [],
+      landing_site: `/?tscid=${click}&utm_source=affiliate`,
+    });
+    expect(shopifyAdapter.parse(raw, headers)).toMatchObject({ kind: "conversion", clickId: click });
+  });
 });
 
 describe("WooCommerce adapter", () => {
@@ -258,15 +359,18 @@ describe("WooCommerce adapter", () => {
     meta_data: [{ key: "tscid", value: click }],
     coupon_lines: [{ code: "pat20" }],
   });
-  const headers = new Headers({
-    "x-wc-webhook-topic": "order.updated",
-    "x-wc-webhook-signature": hmacBase64(secret, body),
-    "x-wc-webhook-id": "evt_woo_1",
-  });
+  function wooHeaders(deliveryId?: string) {
+    return new Headers({
+      "x-wc-webhook-topic": "order.updated",
+      "x-wc-webhook-signature": hmacBase64(secret, body),
+      "x-wc-webhook-id": "evt_woo_webhook_1",
+      ...(deliveryId ? { "x-wc-webhook-delivery-id": deliveryId } : {}),
+    });
+  }
 
   it("verifies and maps a paid order", () => {
-    expect(wooCommerceAdapter.verify(body, headers, secret)).toBe(true);
-    expect(wooCommerceAdapter.parse(body, headers)).toMatchObject({
+    expect(wooCommerceAdapter.verify(body, wooHeaders("delivery_1"), secret)).toBe(true);
+    expect(wooCommerceAdapter.parse(body, wooHeaders("delivery_1"))).toMatchObject({
       kind: "conversion",
       externalId: "7001",
       amountMinor: 3150,
@@ -276,8 +380,32 @@ describe("WooCommerce adapter", () => {
     });
   });
 
+  it("uses the per-delivery ID so a reused webhook is not deduped", () => {
+    const headers = wooHeaders("delivery_1");
+    expect(wooCommerceAdapter.parse(body, headers)).toMatchObject({ providerEventId: "delivery_1" });
+    const next = woocommerceUpdate(body, '"total":"31.50"', '"total":"42.00"');
+    expect(wooCommerceAdapter.parse(next, wooHeaders("delivery_2"))).toMatchObject({ providerEventId: "delivery_2" });
+  });
+
+  it("falls back to the body hash when the delivery header is absent", () => {
+    const first = wooCommerceAdapter.parse(body, wooHeaders());
+    const second = wooCommerceAdapter.parse(body, wooHeaders());
+    const changed = wooCommerceAdapter.parse(woocommerceUpdate(body, '"total":"31.50"', '"total":"42.00"'), wooHeaders());
+    expect(first.kind).toBe("conversion");
+    expect(second.kind).toBe("conversion");
+    expect(changed.kind).toBe("conversion");
+    const ids = [first, second, changed].map((fact) => (fact.kind === "conversion" ? fact.providerEventId : ""));
+    expect(ids[0]).toMatch(/^body_[a-f0-9]{40}$/);
+    expect(ids[1]).toBe(ids[0]);
+    expect(ids[2]).not.toBe(ids[0]);
+  });
+
   it("ignores an unpaid order", () => {
     const unpaid = body.replace('"status":"completed"', '"status":"pending"');
-    expect(wooCommerceAdapter.parse(unpaid, headers).kind).toBe("ignored");
+    expect(wooCommerceAdapter.parse(unpaid, wooHeaders("delivery_1")).kind).toBe("ignored");
   });
 });
+
+function woocommerceUpdate(raw: string, find: string, replacement: string): string {
+  return raw.replace(find, replacement);
+}

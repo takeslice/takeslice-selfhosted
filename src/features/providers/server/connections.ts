@@ -8,7 +8,7 @@ import { newId } from "@/lib/ids";
 import { providerInfo } from "../constants";
 import type { ActiveConnection, ProviderId, ProviderMode, StoredCredentials } from "../types";
 import type { ProviderConnectionInput } from "../schemas";
-import { createStripeWebhook, deleteStripeWebhook, validateStripeKey } from "./stripe";
+import { createStripeWebhook, deleteStripeWebhook, stripeKeyMode, validateStripeKey } from "./stripe";
 
 export interface ProviderConnectionRow {
   id: string;
@@ -106,6 +106,17 @@ export async function saveProviderConnection(input: ProviderConnectionInput, act
 
 async function saveStripeConnection(input: ProviderConnectionInput, actorUserId: string): Promise<ConnectionResult> {
   if (!input.credential) return { ok: false, error: "Add your Stripe secret key so TakeSlice can verify the account and create the webhook." };
+
+  const keyMode = stripeKeyMode(input.credential);
+  if (!keyMode) {
+    return { ok: false, error: "That does not look like a Stripe secret or restricted key. Use an sk_ or rk_ key." };
+  }
+  if (keyMode !== input.mode) {
+    return {
+      ok: false,
+      error: `This is a ${keyMode} key, but the connection is set to ${input.mode} mode. Use a ${input.mode} key or switch the connection mode.`,
+    };
+  }
 
   try {
     await validateStripeKey(input.credential);

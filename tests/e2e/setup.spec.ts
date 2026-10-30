@@ -17,7 +17,7 @@ test("first-run setup creates the admin and signs in", async ({ page }) => {
   await page.getByLabel("Business name").fill("Acme Labs");
   await page.getByLabel("Website").fill("https://acme.example");
   await page.getByLabel("Program name").fill("Acme Partners");
-  await page.getByLabel("Program URL").fill("acme");
+  await page.getByLabel("Program handle").fill("acme");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.locator("#adminName")).toBeVisible();
 

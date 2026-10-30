@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server";
 import { env } from "@/lib/env";
 import { newId } from "@/lib/ids";
 import { checkRateLimit } from "@/lib/rate-limit";
-import { clientAddress, referrerHost, truncate } from "@/lib/request";
+import { clientAddress, referrerHost, trackingRateLimitKey, truncate } from "@/lib/request";
 import { getProgramSettings } from "@/features/program/server/settings";
 import { recordClick, resolveReferral, trackedDestination } from "@/features/tracking/server/clicks";
 
@@ -11,7 +11,9 @@ export async function GET(request: Request, context: RouteContext<"/r/[code]">) 
   const settings = await getProgramSettings();
   const website = settings?.websiteUrl ?? env.APP_URL;
 
-  const rate = await checkRateLimit(`click-redirect:${clientAddress(request.headers)}`, 300, 60);
+  // Do not include the unvalidated code: a random path must not create a new rate-limit row.
+  const bucket = trackingRateLimitKey("click-redirect", request.headers);
+  const rate = await checkRateLimit(bucket.key, bucket.shared ? 3_000 : 300, 60);
   const referral = await resolveReferral(code, website);
 
   const headers = { "Cache-Control": "no-store", "X-Robots-Tag": "noindex" };

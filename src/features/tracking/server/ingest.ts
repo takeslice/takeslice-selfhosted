@@ -1,12 +1,14 @@
 import "server-only";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { affiliate, click, conversion, coupon, programSettings, subscriptionLink } from "@/lib/db/schema";
+import { affiliate, click, commission, conversion, coupon, programSettings, subscriptionLink } from "@/lib/db/schema";
 import { newId } from "@/lib/ids";
 import { getProgramSettings } from "@/features/program/server/settings";
+import { createCommissionForConversion } from "@/features/commissions/server/create";
 import type { AuthenticatedKey } from "@/features/api-keys/server/keys";
 import { decideAttribution, type AttributionDecision, type TrackingMode } from "../attribution";
 import type { ConversionInput } from "../schemas";
+import { applySubscriptionFallback } from "./fallback";
 
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
@@ -14,6 +16,7 @@ export type IngestResult =
   | {
       ok: true;
       conversionId: string;
+      commissionId: string | null;
       duplicate: boolean;
       mode: TrackingMode;
       attribution: AttributionDecision;
@@ -38,19 +41,23 @@ export async function ingestApiConversion(key: AuthenticatedKey, input: Conversi
   const clickRow = await loadClick(input.clickId);
   const couponRow = await loadCoupon(input.couponCode ?? null);
 
-  const attribution = decideAttribution({
-    mode: key.mode,
-    click: input.clickId ? (clickRow ?? null) : undefined,
-    coupon: input.couponCode ? (couponRow ?? null) : undefined,
-    currency,
-    programCurrency: settings.currency,
-    conflict: settings.attributionConflict,
-    conversionAt: occurredAt,
-    attributionDays: settings.attributionDays,
-  });
+  const attribution = await applySubscriptionFallback(
+    decideAttribution({
+      mode: key.mode,
+      click: input.clickId ? (clickRow ?? null) : undefined,
+      coupon: input.couponCode ? (couponRow ?? null) : undefined,
+      currency,
+      programCurrency: settings.currency,
+      conflict: settings.attributionConflict,
+      conversionAt: occurredAt,
+      attributionDays: settings.attributionDays,
+    }),
+    { mode: key.mode, renewal: input.renewal, subscriptionRef: input.subscriptionRef ?? null },
+  );
 
   const dedupeKey = `api:${key.mode}:${input.externalId}`;
   const id = newId("cnv");
+  let createdCommissionId: string | null = null;
 
   try {
     await db.transaction(async (tx) => {
@@ -69,9 +76,24 @@ export async function ingestApiConversion(key: AuthenticatedKey, input: Conversi
         attributionOutcome: attribution.outcome,
         couponCode: attribution.couponCode,
         subscriptionRef: input.subscriptionRef ?? null,
+        providerPaymentRef: input.paymentReference ?? null,
         renewal: input.renewal,
         occurredAt,
       });
+
+      if (attribution.affiliateId) {
+        const created = await createCommissionForConversion(tx, settings, {
+          conversionId: id,
+          affiliateId: attribution.affiliateId,
+          mode: key.mode,
+          saleMinor: input.amountMinor,
+          currency,
+          occurredAt,
+          renewal: input.renewal,
+          subscriptionRef: input.subscriptionRef ?? null,
+        });
+        createdCommissionId = created?.id ?? null;
+      }
 
       if (attribution.affiliateId && input.subscriptionRef) {
         await tx
@@ -90,9 +112,15 @@ export async function ingestApiConversion(key: AuthenticatedKey, input: Conversi
     if (isUniqueViolation(error)) {
       const [existing] = await db.select().from(conversion).where(eq(conversion.dedupeKey, dedupeKey)).limit(1);
       if (existing) {
+        const [existingCommission] = await db
+          .select({ id: commission.id })
+          .from(commission)
+          .where(eq(commission.conversionId, existing.id))
+          .limit(1);
         return {
           ok: true,
           conversionId: existing.id,
+          commissionId: existingCommission?.id ?? null,
           duplicate: true,
           mode: existing.mode,
           attribution: {
@@ -110,7 +138,7 @@ export async function ingestApiConversion(key: AuthenticatedKey, input: Conversi
     return { ok: false, status: 500, error: "The conversion could not be recorded." };
   }
 
-  return { ok: true, conversionId: id, duplicate: false, mode: key.mode, attribution, occurredAt };
+  return { ok: true, conversionId: id, commissionId: createdCommissionId, duplicate: false, mode: key.mode, attribution, occurredAt };
 }
 
 async function loadClick(clickId: string | undefined) {

@@ -35,7 +35,8 @@ export default async function ProgramSettingsPage() {
           recurringMode: settings.recurringMode,
           recurringMonths: settings.recurringMonths,
           approvalMode: settings.approvalMode,
-          couponMode: settings.couponMode,
+          // Instances set up before auto-coupons were removed may still hold "auto".
+          couponMode: settings.couponMode === "disabled" ? "disabled" : "manual",
           attributionConflict: settings.attributionConflict,
           minimumPayoutMinor: settings.minimumPayoutMinor,
         }}

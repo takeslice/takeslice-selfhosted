@@ -188,13 +188,17 @@ export default async function PartnerDashboardPage({ searchParams }: PageProps<"
           </Card>
 
           <Card>
-            <h2 className="font-medium">Earnings</h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="font-medium">Earnings</h2>
+              <Link href="/partners/dashboard/earnings">
+                <Button variant="outline" size="sm">
+                  View earnings <ExternalLink className="size-3.5" aria-hidden="true" />
+                </Button>
+              </Link>
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
-              Your clicks, commissions and payouts appear here as soon as tracking is connected. Share your link to start earning.
+              See pending, approved, available and paid commissions, your payout history and where to receive payouts.
             </p>
-            <Link href="/partners" className="mt-3 inline-flex items-center gap-1 text-sm font-medium underline underline-offset-4">
-              Review the program rules <ExternalLink className="size-3.5" aria-hidden="true" />
-            </Link>
           </Card>
         </div>
       )}

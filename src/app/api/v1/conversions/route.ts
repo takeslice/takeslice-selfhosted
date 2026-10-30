@@ -1,6 +1,7 @@
 import { after } from "next/server";
 import { authenticateApiKey, touchApiKey } from "@/features/api-keys/server/keys";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { readBoundedBody } from "@/lib/request";
 import { conversionSchema } from "@/features/tracking/schemas";
 import { ingestApiConversion } from "@/features/tracking/server/ingest";
 
@@ -15,19 +16,15 @@ export async function POST(request: Request) {
   const rate = await checkRateLimit(`conversion:${key.id}`, 600, 60);
   if (!rate.allowed) return rateLimitResponse(rate);
 
-  const declaredLength = Number(request.headers.get("content-length") ?? "0");
-  if (declaredLength > MAX_BODY_BYTES) {
-    return Response.json({ error: "Request body is too large." }, { status: 413 });
-  }
-
-  const body = await request.text();
-  if (Buffer.byteLength(body, "utf8") > MAX_BODY_BYTES) {
-    return Response.json({ error: "Request body is too large." }, { status: 413 });
+  const body = await readBoundedBody(request, MAX_BODY_BYTES);
+  if (!body.ok) {
+    const status = body.reason === "too_large" ? 413 : 400;
+    return Response.json({ error: body.reason === "too_large" ? "Request body is too large." : "The body could not be read." }, { status });
   }
 
   let json: unknown;
   try {
-    json = JSON.parse(body);
+    json = JSON.parse(body.body);
   } catch {
     return Response.json({ error: "Send a JSON object." }, { status: 400 });
   }
@@ -45,6 +42,7 @@ export async function POST(request: Request) {
   return Response.json({
     object: "conversion",
     id: result.conversionId,
+    commissionId: result.commissionId,
     duplicate: result.duplicate,
     mode: result.mode,
     test: result.mode === "test",

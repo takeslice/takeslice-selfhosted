@@ -103,7 +103,7 @@ export const conversion = pgTable(
     currency: char("currency", { length: 3 }).notNull(),
     clickId: text("click_id").references(() => click.id, { onDelete: "set null" }),
     affiliateId: text("affiliate_id").references(() => affiliate.id, { onDelete: "set null" }),
-    attributedVia: text("attributed_via", { enum: ["click", "coupon", "none"] }).notNull().default("none"),
+    attributedVia: text("attributed_via", { enum: ["click", "coupon", "subscription", "none"] }).notNull().default("none"),
     attributionOutcome: text("attribution_outcome", {
       enum: [
         "attributed",
@@ -118,6 +118,8 @@ export const conversion = pgTable(
     }).notNull(),
     couponCode: text("coupon_code"),
     subscriptionRef: text("subscription_ref"),
+    /** Provider payment/charge reference used to match later refunds. */
+    providerPaymentRef: text("provider_payment_ref"),
     renewal: boolean("renewal").notNull().default(false),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -126,6 +128,7 @@ export const conversion = pgTable(
     index("conversion_affiliate_time_idx").on(table.affiliateId, table.occurredAt),
     index("conversion_time_idx").on(table.occurredAt),
     index("conversion_outcome_idx").on(table.attributionOutcome),
+    index("conversion_provider_payment_idx").on(table.providerConnectionId, table.providerPaymentRef),
     check("conversion_amount_check", sql`${table.amountMinor} >= 0`),
     check("conversion_currency_check", sql`${table.currency} ~ '^[A-Z]{3}$'`),
   ],

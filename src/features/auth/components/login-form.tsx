@@ -46,7 +46,7 @@ export function LoginForm({ defaultNext = "/dashboard" }: { defaultNext?: string
   const justVerified = searchParams.get("verified") === "1";
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
+    <form method="post" onSubmit={onSubmit} className="flex flex-col gap-4" noValidate>
       {justSetUp && <Alert tone="success">Setup is complete. Sign in with the admin account you just created.</Alert>}
       {justVerified && <Alert tone="success">Email confirmed. Sign in to continue.</Alert>}
       {error && <Alert tone="error">{error}</Alert>}

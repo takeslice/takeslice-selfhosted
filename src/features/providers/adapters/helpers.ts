@@ -88,7 +88,8 @@ export function clickIdFromUrl(value: unknown): string | null {
   const url = text(value);
   if (!url) return null;
   try {
-    return clickId(new URL(url).searchParams.get("tscid"));
+    // Shopify's landing_site is usually a relative path such as "/?tscid=clk_…".
+    return clickId(new URL(url, "https://shop.invalid").searchParams.get("tscid"));
   } catch {
     return null;
   }

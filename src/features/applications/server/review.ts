@@ -35,6 +35,7 @@ export async function approveApplication(
 
       const [person] = await tx.select().from(affiliate).where(eq(affiliate.id, application.affiliateId)).for("update");
       if (!person) throw new ReviewError("The applicant record is missing.");
+      if (!person.userId) throw new ReviewError("The applicant has no sign-in account.");
       const [account] = await tx.select({ email: user.email, name: user.name }).from(user).where(eq(user.id, person.userId)).limit(1);
       if (!account) throw new ReviewError("The applicant account is missing.");
       if (!canTransitionAffiliate(person.status as AffiliateStatus, "approved")) {
@@ -104,6 +105,7 @@ export async function rejectApplication(applicationId: string, reason: string, a
 
       const [person] = await tx.select().from(affiliate).where(eq(affiliate.id, application.affiliateId)).for("update");
       if (!person) throw new ReviewError("The applicant record is missing.");
+      if (!person.userId) throw new ReviewError("The applicant has no sign-in account.");
       const [account] = await tx.select({ email: user.email, name: user.name }).from(user).where(eq(user.id, person.userId)).limit(1);
       if (!account) throw new ReviewError("The applicant account is missing.");
       if (!canTransitionAffiliate(person.status as AffiliateStatus, "rejected")) {

@@ -10,7 +10,9 @@ const SECTIONS = [
   { href: "/dashboard/settings/email", label: "Email" },
   { href: "/dashboard/settings/questions", label: "Questions" },
   { href: "/dashboard/settings/api-keys", label: "API keys" },
+  { href: "/dashboard/settings/ai-setup", label: "AI Setup" },
   { href: "/dashboard/settings/audit", label: "Audit log" },
+  { href: "/dashboard/settings/diagnostics", label: "Diagnostics" },
 ] as const;
 
 export function SettingsNav() {

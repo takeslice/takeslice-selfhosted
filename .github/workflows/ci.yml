@@ -1,0 +1,129 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: takeslice
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d takeslice"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/takeslice
+      APP_URL: http://localhost:3000
+      BETTER_AUTH_SECRET: ci-secret-value-that-is-long-enough-123
+      ENCRYPTION_KEY: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+      SETUP_TOKEN: ci-setup-token-1234567890
+      ADMIN_EMAIL: admin@acme.example
+      ADMIN_PASSWORD: correct-horse-1
+      EMAIL_OUTBOX_DIR: /tmp/takeslice-outbox
+      UPLOADS_DIR: /tmp/takeslice-uploads
+      TRUST_PROXY: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Apply migrations
+        run: pnpm db:migrate
+
+      - name: Build
+        run: pnpm build
+
+      - name: Install Playwright browser
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: End-to-end tests
+        run: |
+          set -euo pipefail
+          mkdir -p "$EMAIL_OUTBOX_DIR" "$UPLOADS_DIR"
+          nohup pnpm start > /tmp/takeslice-app.log 2>&1 &
+          APP_PID=$!
+          trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
+
+          ready=0
+          for _ in $(seq 1 60); do
+            if curl -fsS "$APP_URL/api/health" > /dev/null; then
+              ready=1
+              break
+            fi
+            sleep 2
+          done
+          if [ "$ready" != "1" ]; then
+            cat /tmp/takeslice-app.log
+            exit 1
+          fi
+
+          # The setup spec must run first and only once on a fresh instance.
+          pnpm exec playwright test tests/e2e/setup.spec.ts
+
+          pnpm exec playwright test \
+            tests/e2e/admin.spec.ts \
+            tests/e2e/affiliate.spec.ts \
+            tests/e2e/settings.spec.ts \
+            tests/e2e/tracking.spec.ts \
+            tests/e2e/webhooks.spec.ts \
+            tests/e2e/commissions.spec.ts \
+            --workers=1
+
+      - name: Upload test artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload server log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-log
+          path: /tmp/takeslice-app.log
+          if-no-files-found: ignore
+          retention-days: 7

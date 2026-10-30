@@ -11,7 +11,9 @@ export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 const ALLOWED_INPUT = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 export function uploadsDir(): string {
-  return process.env.UPLOADS_DIR ?? join(process.cwd(), "data", "uploads");
+  if (process.env.UPLOADS_DIR) return process.env.UPLOADS_DIR;
+  const dataDir = process.env.DATA_DIR;
+  return dataDir ? join(dataDir, "uploads") : join(process.cwd(), "data", "uploads");
 }
 
 function filePath(storageKey: string): string {

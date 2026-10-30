@@ -20,7 +20,13 @@ export const PROVIDERS: ProviderInfo[] = [
     credentialPlaceholder: "sk_live_…",
     credentialHint: "Use a restricted key with read access, or a secret key. It is encrypted at rest.",
     autoWebhook: true,
-    webhookEvents: ["checkout.session.completed", "invoice.paid"],
+    webhookEvents: [
+      "checkout.session.completed",
+      "checkout.session.async_payment_succeeded",
+      "invoice.paid",
+      "charge.refunded",
+      "charge.dispute.created",
+    ],
     setup: "Add your secret key. When this instance has a public HTTPS URL, TakeSlice creates the webhook endpoint and stores its signing secret automatically.",
   },
   {
@@ -71,7 +77,7 @@ export const PROVIDERS: ProviderInfo[] = [
     credentialHint: "Stored encrypted. Only used for provider validation.",
     autoWebhook: false,
     webhookEvents: ["INITIAL_PURCHASE", "RENEWAL", "NON_RENEWING_PURCHASE"],
-    setup: "Create a webhook in RevenueCat, set its Authorization header to a long random value, and paste that same value here.",
+    setup: "Create a webhook in RevenueCat, set its Authorization header to Bearer <secret>, and paste only the secret here.",
   },
   {
     id: "shopify",

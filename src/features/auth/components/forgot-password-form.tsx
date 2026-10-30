@@ -31,7 +31,7 @@ export function ForgotPasswordForm() {
   }
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
+    <form method="post" onSubmit={submit} className="flex flex-col gap-4" noValidate>
       {error && <Alert tone="error">{error}</Alert>}
       <Field label="Email" htmlFor="forgot-email" hint="If an account exists, we will send a reset code.">
         <Input id="forgot-email" name="email" type="email" autoComplete="email" required />

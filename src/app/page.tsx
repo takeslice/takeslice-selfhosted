@@ -1,10 +1,10 @@
-export default function HomePage() {
-  return (
-    <main className="mx-auto flex min-h-svh max-w-2xl flex-col justify-center gap-4 p-8">
-      <h1 className="text-3xl font-semibold tracking-tight">TakeSlice Self-Hosted</h1>
-      <p className="text-muted-foreground">
-        This instance is not set up yet. The setup wizard is added in the next milestone.
-      </p>
-    </main>
-  );
+import { redirect } from "next/navigation";
+import { connection } from "next/server";
+import { isSetupComplete } from "@/features/setup/server/setup-token";
+
+export const dynamic = "force-dynamic";
+
+export default async function HomePage() {
+  await connection();
+  redirect((await isSetupComplete()) ? "/partners" : "/setup");
 }
