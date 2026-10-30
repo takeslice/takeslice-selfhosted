@@ -1,18 +1,36 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { setupSchema } from "@/features/setup/schemas";
 import { completeSetup } from "@/features/setup/server/complete-setup";
 import { SETUP_COOKIE, SETUP_COOKIE_MAX_AGE, ensureInstance, tokenMatches } from "@/features/setup/server/setup-token";
 import { env } from "@/lib/env";
+import { checkRateLimit } from "@/lib/rate-limit";
+import { clientAddress } from "@/lib/request";
 
 export interface SetupActionState {
   error?: string;
   fieldErrors?: Record<string, string>;
 }
 
+const SETUP_ATTEMPT_LIMIT = 10;
+const SETUP_ATTEMPT_WINDOW_SECONDS = 60;
+
+async function setupAttemptAllowed(scope: "token" | "submit"): Promise<boolean> {
+  const requestHeaders = await headers();
+  const rate = await checkRateLimit(
+    `setup:${scope}:${clientAddress(requestHeaders)}`,
+    SETUP_ATTEMPT_LIMIT,
+    SETUP_ATTEMPT_WINDOW_SECONDS,
+  );
+  return rate.allowed;
+}
+
 export async function verifySetupTokenAction(_state: SetupActionState, formData: FormData): Promise<SetupActionState> {
+  if (!(await setupAttemptAllowed("token"))) {
+    return { error: "Too many setup attempts. Wait a minute and try again." };
+  }
   const token = String(formData.get("token") ?? "").trim();
   const instance = await ensureInstance();
   if (instance.setupCompletedAt) return { error: "This instance is already set up." };
@@ -29,6 +47,9 @@ export async function verifySetupTokenAction(_state: SetupActionState, formData:
 }
 
 export async function submitSetupAction(_state: SetupActionState, formData: FormData): Promise<SetupActionState> {
+  if (!(await setupAttemptAllowed("submit"))) {
+    return { error: "Too many setup attempts. Wait a minute and try again." };
+  }
   const raw = Object.fromEntries(formData) as Record<string, string>;
   const parsed = setupSchema.safeParse(raw);
   if (!parsed.success) {
