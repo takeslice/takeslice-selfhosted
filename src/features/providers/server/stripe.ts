@@ -79,3 +79,49 @@ export async function deleteStripeWebhook(secretKey: string, id: string): Promis
     console.warn("[providers] Stripe webhook cleanup failed", error instanceof Error ? error.message : "unknown");
   }
 }
+
+export async function createStripeCoupon(
+  secretKey: string,
+  input: { code: string; percentOff: number; localCouponId: string },
+): Promise<{ couponId: string; promotionId: string }> {
+  const couponBody = new URLSearchParams();
+  couponBody.set("percent_off", String(input.percentOff));
+  couponBody.set("duration", "forever");
+  couponBody.set("name", `TakeSlice ${input.code}`);
+  couponBody.set("metadata[takeslice_coupon_id]", input.localCouponId);
+  const coupon = (await stripeRequest("/coupons", secretKey, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Idempotency-Key": `takeslice-coupon-${input.localCouponId}`,
+    },
+    body: couponBody,
+  })) as { id?: string } | null;
+  if (!coupon?.id) throw new StripeRequestError("Stripe created a coupon but did not return its ID.");
+
+  const promotionBody = new URLSearchParams();
+  promotionBody.set("promotion[type]", "coupon");
+  promotionBody.set("promotion[coupon]", coupon.id);
+  promotionBody.set("code", input.code);
+  promotionBody.set("active", "true");
+  const promotion = (await stripeRequest("/promotion_codes", secretKey, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Idempotency-Key": `takeslice-promotion-${input.localCouponId}`,
+    },
+    body: promotionBody,
+  })) as { id?: string } | null;
+  if (!promotion?.id) throw new StripeRequestError("Stripe created a promotion code but did not return its ID.");
+  return { couponId: coupon.id, promotionId: promotion.id };
+}
+
+export async function setStripePromotionCodeActive(secretKey: string, promotionId: string, active: boolean): Promise<void> {
+  const body = new URLSearchParams();
+  body.set("active", active ? "true" : "false");
+  await stripeRequest(`/promotion_codes/${encodeURIComponent(promotionId)}`, secretKey, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body,
+  });
+}

@@ -3,11 +3,10 @@ import Link from "next/link";
 import { Ticket } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Alert, Card } from "@/components/ui/field";
 import { listAffiliates } from "@/features/affiliates/server/queries";
-import { toggleCouponAction } from "@/features/coupons/actions";
 import { CouponForm } from "@/features/coupons/components/coupon-form";
+import { CouponStatusForm } from "@/features/coupons/components/coupon-status-form";
 import { listCoupons } from "@/features/coupons/server/coupons";
 import { getProgramSettings } from "@/features/program/server/settings";
 import { requireAdmin } from "@/lib/auth/session";
@@ -61,7 +60,12 @@ export default async function CouponsPage() {
                   <tr key={code.id} className="border-b last:border-0">
                     <td className="px-4 py-3">
                       <code className="font-medium">{code.code}</code>
-                      {code.discountText && <span className="block text-xs text-muted-foreground">{code.discountText}</span>}
+                      {(code.discountPercent || code.discountText) && (
+                        <span className="block text-xs text-muted-foreground">
+                          {code.discountPercent ? `${code.discountPercent}% off` : code.discountText}
+                          {code.discountPercent && code.discountText ? ` · ${code.discountText}` : ""}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <Link href={`/dashboard/affiliates/${code.affiliateId}`} className="hover:underline">
@@ -71,17 +75,25 @@ export default async function CouponsPage() {
                     <td className="px-4 py-3">
                       <Badge tone={code.status === "active" ? "success" : "neutral"}>{code.status === "active" ? "Active" : "Inactive"}</Badge>
                     </td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {code.syncStatus === "synced" ? "Synced" : code.syncStatus === "error" ? "Sync failed" : "Create manually in provider"}
+                    <td className="max-w-72 px-4 py-3 text-muted-foreground">
+                      {code.syncStatus === "synced" ? (
+                        "Stripe · synced"
+                      ) : code.syncStatus === "error" ? (
+                        <span className="text-destructive">
+                          Stripe · sync failed
+                          {code.lastError && <span className="mt-1 block text-xs break-words">{code.lastError}</span>}
+                        </span>
+                      ) : (
+                        "Not synced"
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <form action={toggleCouponAction}>
-                        <input type="hidden" name="id" value={code.id} />
-                        <input type="hidden" name="status" value={code.status === "active" ? "inactive" : "active"} />
-                        <Button type="submit" variant="outline" size="sm">
-                          {code.status === "active" ? "Deactivate" : "Activate"}
-                        </Button>
-                      </form>
+                      <CouponStatusForm
+                        id={code.id}
+                        status={code.status}
+                        canSync={Boolean(code.discountPercent)}
+                        synced={code.syncStatus === "synced"}
+                      />
                     </td>
                   </tr>
                 ))}

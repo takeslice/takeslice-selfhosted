@@ -128,7 +128,7 @@ test("API tracks clicks, conversions, duplicates and attribution failures", asyn
   await page.goto("/dashboard/coupons");
   await page.getByLabel("Affiliate").selectOption({ label: `${name} · ${email}` });
   await page.getByLabel("Code").fill(couponCode);
-  await page.getByLabel("Discount").fill("20% off");
+  await page.getByLabel("Discount note").fill("20% off");
   await page.getByRole("button", { name: "Add coupon" }).click();
   await expect(page.getByText(`Coupon ${couponCode} created`)).toBeVisible();
 

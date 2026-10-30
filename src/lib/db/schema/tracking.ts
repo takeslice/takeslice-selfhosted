@@ -33,8 +33,8 @@ export const referralLink = pgTable(
 );
 
 /**
- * Codes used for coupon attribution. Remote provider sync arrives with the provider layer;
- * `provider_connection_id` stays a plain reference until that table exists.
+ * Codes used for coupon attribution. When a discount percentage is set and a live
+ * Stripe connection exists, the code is also created as a Stripe promotion code.
  */
 export const coupon = pgTable(
   "coupon",
@@ -45,9 +45,11 @@ export const coupon = pgTable(
       .references(() => affiliate.id, { onDelete: "cascade" }),
     code: text("code").notNull().unique(),
     discountText: text("discount_text"),
+    discountPercent: integer("discount_percent"),
     status: text("status", { enum: ["active", "inactive"] }).notNull().default("active"),
     providerConnectionId: text("provider_connection_id").references(() => providerConnection.id, { onDelete: "set null" }),
     remoteCouponId: text("remote_coupon_id"),
+    remotePromotionId: text("remote_promotion_id"),
     syncStatus: text("sync_status", { enum: ["not_synced", "synced", "error"] }).notNull().default("not_synced"),
     lastError: text("last_error"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
@@ -59,6 +61,7 @@ export const coupon = pgTable(
   (table) => [
     index("coupon_affiliate_idx").on(table.affiliateId),
     check("coupon_code_check", sql`${table.code} ~ '^[A-Za-z0-9_-]{3,64}$'`),
+    check("coupon_discount_percent_check", sql`${table.discountPercent} is null or (${table.discountPercent} >= 1 and ${table.discountPercent} <= 100)`),
   ],
 );
 

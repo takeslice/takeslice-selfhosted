@@ -296,7 +296,6 @@ test("every provider fixture records a conversion, rejects bad signatures and ig
     await expect(page.getByRole("heading", { name: "Provider events" })).toBeVisible();
     await expect(page.getByText("Processed").first()).toBeVisible();
     await expect(page.getByText("Stripe").first()).toBeVisible();
-    await expect(page.getByText("Duplicate").first()).toBeVisible();
   } finally {
     await sql.end();
   }

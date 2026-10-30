@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { brandingSchema, programSettingsSchema } from "@/features/program/schemas";
+import { couponSchema } from "@/features/coupons/schemas";
 import { emailSettingsSchema } from "@/features/email/schemas";
 import { questionSchema } from "@/features/questions/schemas";
 
@@ -38,6 +39,21 @@ describe("programSettingsSchema", () => {
   it("requires renewal months for limited recurring commissions", () => {
     expect(programSettingsSchema.safeParse({ ...program, recurringMode: "months" }).success).toBe(false);
     expect(programSettingsSchema.safeParse({ ...program, recurringMode: "months", recurringMonths: "12" }).success).toBe(true);
+  });
+});
+
+describe("couponSchema", () => {
+  it("uppercases the code and treats an empty discount percentage as manual sync", () => {
+    const parsed = couponSchema.parse({ affiliateId: "aff_1", code: "alex20", discountPercent: "", discountText: "" });
+    expect(parsed.code).toBe("ALEX20");
+    expect(parsed.discountPercent).toBeNull();
+  });
+
+  it("accepts 1–100 percent discounts and rejects values outside that range", () => {
+    expect(couponSchema.parse({ affiliateId: "aff_1", code: "ALEX20", discountPercent: "20" }).discountPercent).toBe(20);
+    expect(couponSchema.safeParse({ affiliateId: "aff_1", code: "ALEX20", discountPercent: "0" }).success).toBe(false);
+    expect(couponSchema.safeParse({ affiliateId: "aff_1", code: "ALEX20", discountPercent: "101" }).success).toBe(false);
+    expect(couponSchema.safeParse({ affiliateId: "aff_1", code: "ALEX20", discountPercent: "12.5" }).success).toBe(false);
   });
 });
 

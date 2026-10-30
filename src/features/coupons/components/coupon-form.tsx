@@ -21,7 +21,7 @@ export function CouponForm({ affiliates }: { affiliates: { id: string; name: str
         <div>
           <h2 className="text-sm font-medium">Add a coupon code</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            TakeSlice records the code for attribution. Create the same code in your payment provider so customers can use it at checkout.
+            TakeSlice records the code for attribution. Add a discount percentage to create a matching Stripe promotion code automatically when Stripe is connected in live mode.
           </p>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -40,10 +40,18 @@ export function CouponForm({ affiliates }: { affiliates: { id: string; name: str
           <Field label="Code" htmlFor="code" error={errors.code} hint="Letters, numbers, dashes and underscores. Saved in uppercase.">
             <Input id="code" name="code" maxLength={64} required placeholder="PAT20" autoCapitalize="characters" />
           </Field>
+          <Field
+            label="Discount percentage"
+            htmlFor="discountPercent"
+            error={errors.discountPercent}
+            hint="Optional. 1–100. Used to create the Stripe promotion code."
+          >
+            <Input id="discountPercent" name="discountPercent" type="number" min={1} max={100} inputMode="numeric" placeholder="20" />
+          </Field>
+          <Field label="Discount note" htmlFor="discountText" error={errors.discountText} hint="Shown in your dashboard only.">
+            <Input id="discountText" name="discountText" maxLength={80} placeholder="20% off first year" />
+          </Field>
         </div>
-        <Field label="Discount" htmlFor="discountText" error={errors.discountText} hint="Shown in your dashboard only. The provider decides the real discount.">
-          <Input id="discountText" name="discountText" maxLength={80} placeholder="20% off first year" />
-        </Field>
         <div>
           <Button type="submit" disabled={pending}>
             {pending ? "Adding coupon..." : "Add coupon"}
