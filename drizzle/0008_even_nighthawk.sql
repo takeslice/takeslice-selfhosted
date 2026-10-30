@@ -1,0 +1,4 @@
+ALTER TABLE "provider_connection" ADD CONSTRAINT "provider_connection_provider_check" CHECK ("provider_connection"."provider" in ('stripe', 'paddle', 'lemonsqueezy', 'dodo', 'polar', 'revenuecat', 'shopify', 'woocommerce'));--> statement-breakpoint
+ALTER TABLE "provider_connection" ADD CONSTRAINT "provider_connection_mode_check" CHECK ("provider_connection"."mode" in ('live', 'test'));--> statement-breakpoint
+ALTER TABLE "provider_connection" ADD CONSTRAINT "provider_connection_status_check" CHECK ("provider_connection"."status" in ('pending', 'active', 'disconnected'));--> statement-breakpoint
+ALTER TABLE "provider_event" ADD CONSTRAINT "provider_event_outcome_check" CHECK ("provider_event"."outcome" in ('processing', 'processed', 'duplicate', 'ignored', 'deferred'));

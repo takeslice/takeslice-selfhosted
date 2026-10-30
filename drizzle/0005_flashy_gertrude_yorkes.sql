@@ -1,0 +1,1 @@
+ALTER TABLE "program_settings" ADD COLUMN "attribution_conflict" text DEFAULT 'click' NOT NULL;
