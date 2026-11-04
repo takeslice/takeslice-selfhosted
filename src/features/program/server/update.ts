@@ -1,14 +1,32 @@
 import "server-only";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { auditLog, programSettings } from "@/lib/db/schema";
+import { auditLog, commission, programSettings } from "@/lib/db/schema";
 import { newId } from "@/lib/ids";
 import { parseMoneyToMinor } from "@/lib/money";
 import type { BrandingInput, ProgramSettingsInput } from "../schemas";
 
 export type UpdateResult = { ok: true } | { ok: false; error: string; fieldErrors?: Record<string, string> };
 
+/**
+ * Balances, payouts and adjustments are all filtered by the program currency. Once any commission
+ * exists, switching currency would leave existing money unpayable and invisible, so it is locked.
+ */
+async function currencyChangeBlocked(nextCurrency: string): Promise<boolean> {
+  const [current] = await db.select({ currency: programSettings.currency }).from(programSettings).where(eq(programSettings.id, "default")).limit(1);
+  if (!current || current.currency === nextCurrency) return false;
+  const [existing] = await db.select({ id: commission.id }).from(commission).limit(1);
+  return Boolean(existing);
+}
+
 export async function updateProgramSettings(input: ProgramSettingsInput, actorUserId: string): Promise<UpdateResult> {
+  if (await currencyChangeBlocked(input.currency)) {
+    return {
+      ok: false,
+      error: "The program currency cannot change after commissions exist.",
+      fieldErrors: { currency: "Commissions already exist in the current currency, so it is locked. Start a new instance to use another currency." },
+    };
+  }
   const minimumPayoutMinor = parseMoneyToMinor(input.minimumPayout, input.currency);
   if (minimumPayoutMinor === null) {
     return { ok: false, error: "Check the amounts below.", fieldErrors: { minimumPayout: "Enter an amount like 50 or 50.00." } };
