@@ -114,7 +114,7 @@ You create a payout for available items, transfer the money externally, and mark
 
 ### Payouts
 
-- Manual payouts only: TakeSlice records the transfer, it does not move money itself. There is no CSV export or bulk payout yet.
+- Manual payouts only: TakeSlice records the transfer, it does not move money itself. **Export payable balances (CSV)** on the Payouts page lists every approved affiliate over the minimum with their payout details, for paying a batch from a spreadsheet or a PayPal/Wise bulk file. You still create and mark each payout paid in TakeSlice. There is no automatic or one-click bulk payout yet.
 - Available-balance calculation with active adjustments.
 - Payout items reserve commissions and adjustments so nothing can be paid twice.
 - Mark paid with a reference, or cancel to release the reserved items.
@@ -151,11 +151,11 @@ All adapters verify provider signatures and deduplicate deliveries. Only Stripe 
 
 The core loop is implemented. Remaining work, in priority order:
 
-- **Next:** integration diagnostics with a test event workflow, embedded Refer & Earn widget and signed embed tokens, customer referral registration API for apps without a full partner account, provider refund events beyond Stripe, reporting with date ranges and CSV export.
+- **Next:** integration diagnostics with a test event workflow, embedded Refer & Earn widget and signed embed tokens, customer referral registration API for apps without a full partner account, provider refund events beyond Stripe, reporting with date ranges and CSV export of commissions and conversions.
 - **Later:** automatic affiliate coupon assignment, scheduled autopay or Stripe Connect, additional admin seats and roles, multi-currency, creative library, outbound webhooks and a documented OpenAPI schema, email template editing, i18n, fraud scoring.
 - **Not planned for the core release:** affiliate marketplace or partner discovery, AI prospecting, cloud licensing, telemetry, or any dependency on the hosted TakeSlice product.
 
-Not yet implemented: overview charts and period reports, CSV export, automatic payouts, multi-currency, embedded iframe widget, customer referral API, and automatic coupon assignment. The worker handles commission maturity and queued email; it does not run provider reconciliation.
+Not yet implemented: overview charts and period reports, CSV export of commissions and conversions (the payable-balances payout export exists), automatic payouts, multi-currency, embedded iframe widget, customer referral API, and automatic coupon assignment. The worker handles commission maturity and queued email; it does not run provider reconciliation.
 
 ---
 
@@ -452,7 +452,7 @@ Yes for a controlled single-business deployment. The core loop has been audited 
 Two caveats before handling live money:
 
 - Only Stripe has been tested against a real payment-provider sandbox. The other seven adapters are verified against recorded fixtures and signature contracts, so run a test-mode transaction with your own provider first.
-- Reporting and CSV export, embedded referrals and non-Stripe refund webhooks are not implemented yet; see the [Roadmap](#roadmap).
+- Reporting, commission and conversion CSV export, embedded referrals and non-Stripe refund webhooks are not implemented yet; see the [Roadmap](#roadmap).
 
 Run a full test-mode cycle, back up your data, configure HTTPS and email, and review [SECURITY.md](SECURITY.md) before switching to live mode.
 

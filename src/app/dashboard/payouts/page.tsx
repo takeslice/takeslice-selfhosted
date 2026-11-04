@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Wallet } from "lucide-react";
+import { Download, Wallet } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/field";
@@ -23,6 +23,20 @@ export default async function PayoutsPage() {
         title="Payouts"
         description="Payouts are sent outside TakeSlice and recorded here. A payout reserves the selected commissions until it is marked paid or cancelled."
       />
+
+      <Card className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <span className="text-muted-foreground">
+          Download everyone whose available balance has reached the minimum, with payout details, to pay them in one batch.
+        </span>
+        {/* A plain anchor on purpose: next/link would prefetch this route handler, which decrypts payout details. */}
+        <a
+          href="/dashboard/payouts/export"
+          download
+          className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 font-medium hover:bg-muted"
+        >
+          <Download className="size-4" aria-hidden="true" /> Export payable balances (CSV)
+        </a>
+      </Card>
 
       {rows.length === 0 ? (
         <Card className="flex items-center gap-3 text-sm text-muted-foreground">
