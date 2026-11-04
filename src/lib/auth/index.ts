@@ -8,7 +8,7 @@ import { emailOTP } from "better-auth/plugins";
 import { db } from "@/lib/db/client";
 import * as schema from "@/lib/db/schema";
 import { env } from "@/lib/env";
-import { sendEmail } from "@/lib/email";
+import { isEmailConfigured, sendEmail } from "@/lib/email";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { resetPassword as resetPasswordEmail, verifyEmail as verifyEmailEmail } from "@/lib/email/templates";
 import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH, passwordProblem } from "@/features/auth/password";
@@ -76,6 +76,13 @@ export const auth = betterAuth({
             throw new APIError("TOO_MANY_REQUESTS", { message: "Too many sign-in attempts for this account. Try again in a few minutes." });
           }
         }
+      }
+      // Better Auth sends the confirmation code in a background task, so a delivery error cannot
+      // reach the visitor. Refuse sign-up up front instead of creating an account nobody can verify.
+      if (ctx.path === "/sign-up/email" && !(await isEmailConfigured())) {
+        throw new APIError("SERVICE_UNAVAILABLE", {
+          message: "This instance cannot send email yet. Ask the administrator to configure SMTP in Settings > Email.",
+        });
       }
       if (!PASSWORD_SETTING_PATHS.has(ctx.path)) return;
       const password: unknown = ctx.body?.password ?? ctx.body?.newPassword;

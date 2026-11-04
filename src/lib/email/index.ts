@@ -26,6 +26,13 @@ export async function getEmailSettings() {
   return row ?? null;
 }
 
+/** True when a message could be delivered or captured: the dev outbox, or complete SMTP settings. */
+export async function isEmailConfigured(): Promise<boolean> {
+  if (env.EMAIL_OUTBOX_DIR) return true;
+  const settings = await getEmailSettings();
+  return Boolean(settings?.host && settings.fromEmail);
+}
+
 /**
  * Sends transactional email through the instance SMTP settings. Never pretends a message was
  * delivered: callers receive `not_configured` or `failed` and must show that to the user.
