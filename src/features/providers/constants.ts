@@ -18,7 +18,7 @@ export const PROVIDERS: ProviderInfo[] = [
     label: "Stripe",
     credentialLabel: "Secret key",
     credentialPlaceholder: "sk_live_…",
-    credentialHint: "Use a restricted key with read access, or a secret key. It is encrypted at rest.",
+    credentialHint: "Use a secret key, or a restricted key with write access to Webhook Endpoints, Coupons and Promotion Codes. It is encrypted at rest.",
     autoWebhook: true,
     webhookEvents: [
       "checkout.session.completed",

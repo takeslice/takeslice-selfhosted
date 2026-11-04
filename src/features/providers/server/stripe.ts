@@ -58,6 +58,25 @@ export function stripeKeyMode(secretKey: string): "live" | "test" | null {
   return match ? (match[1] as "live" | "test") : null;
 }
 
+/**
+ * Invoices no longer expose payment_intent or charge, and refund events only carry the
+ * PaymentIntent. The invoice_payments list maps one to the other. The version is pinned so the
+ * endpoint exists whatever API version the account defaults to.
+ */
+const INVOICE_PAYMENTS_VERSION = "2025-03-31.basil";
+
+export async function findStripeInvoiceForPaymentIntent(secretKey: string, paymentIntentId: string): Promise<string | null> {
+  const query = new URLSearchParams();
+  query.set("payment[type]", "payment_intent");
+  query.set("payment[payment_intent]", paymentIntentId);
+  query.set("limit", "1");
+  const response = (await stripeRequest(`/invoice_payments?${query.toString()}`, secretKey, {
+    headers: { "Stripe-Version": INVOICE_PAYMENTS_VERSION },
+  })) as { data?: Array<{ invoice?: unknown }> } | null;
+  const invoice = response?.data?.[0]?.invoice;
+  return typeof invoice === "string" && invoice.length > 0 ? invoice : null;
+}
+
 export async function validateStripeKey(secretKey: string): Promise<boolean> {
   await stripeRequest("/account", secretKey);
   return true;

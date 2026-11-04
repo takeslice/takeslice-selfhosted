@@ -101,7 +101,9 @@ export const stripeAdapter: ProviderAdapter = {
       const amountMinor = integerMinor(object.amount_paid);
       const externalId = text(object.id);
       if (amountMinor === null || !externalId) return { kind: "invalid", reason: "Stripe invoice is missing its amount or ID." };
-      const metadata = asRecord(object.metadata) ?? asRecord(read(object, "subscription_details", "metadata"));
+      // API versions from 2025-03-31.basil moved the subscription under `parent`.
+      const parentDetails = text(read(object, "parent", "type")) === "subscription_details" ? asRecord(read(object, "parent", "subscription_details")) : null;
+      const metadata = asRecord(object.metadata) ?? asRecord(parentDetails?.metadata) ?? asRecord(read(object, "subscription_details", "metadata"));
       return {
         kind: "conversion",
         providerEventId,
@@ -113,8 +115,8 @@ export const stripeAdapter: ProviderAdapter = {
         occurredAt: created,
         clickId: clickIdFromMetadata(metadata),
         couponCode: couponFromMetadata(metadata),
-        subscriptionRef: optionalString(object.subscription),
-        paymentReference: optionalString(object.payment_intent) ?? optionalString(object.charge),
+        subscriptionRef: optionalString(object.subscription) ?? optionalString(parentDetails?.subscription),
+        paymentReference: optionalString(object.payment_intent) ?? optionalString(object.charge) ?? externalId,
         renewal: billingReason === "subscription_cycle",
       };
     }
@@ -138,7 +140,8 @@ export const stripeAdapter: ProviderAdapter = {
       clickId: clickIdFromMetadata({ client_reference_id: object.client_reference_id }) ?? clickIdFromMetadata(metadata),
       couponCode: couponFromMetadata(metadata),
       subscriptionRef: optionalString(object.subscription),
-      paymentReference: optionalString(object.payment_intent) ?? optionalString(object.id),
+      // Subscription-mode sessions have no PaymentIntent; their first payment is the session's invoice.
+      paymentReference: optionalString(object.payment_intent) ?? optionalString(object.invoice) ?? optionalString(object.id),
       renewal: false,
     };
   },

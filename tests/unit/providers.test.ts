@@ -158,6 +158,62 @@ describe("Stripe adapter", () => {
       paymentReference: "pi_invoice_1",
     });
   });
+
+  it("reads the subscription from `parent` on basil-era invoices that dropped top-level fields", () => {
+    const raw = JSON.stringify({
+      id: "evt_invoice_basil",
+      type: "invoice.paid",
+      created: 1_793_395_200,
+      data: {
+        object: {
+          id: "in_basil_1",
+          status: "paid",
+          billing_reason: "subscription_cycle",
+          amount_paid: 4900,
+          currency: "eur",
+          parent: {
+            type: "subscription_details",
+            subscription_details: { subscription: "sub_basil", metadata: { takeslice_click_id: "clk_basil" } },
+          },
+          metadata: {},
+        },
+      },
+    });
+    expect(stripeAdapter.parse(raw, new Headers())).toMatchObject({
+      kind: "conversion",
+      externalId: "in_basil_1",
+      subscriptionRef: "sub_basil",
+      // No payment_intent or charge on the invoice: the invoice id is the stable reference.
+      paymentReference: "in_basil_1",
+      renewal: true,
+    });
+  });
+
+  it("stores the invoice as the payment reference for subscription-mode checkout sessions", () => {
+    const raw = JSON.stringify({
+      id: "evt_checkout_sub",
+      type: "checkout.session.completed",
+      created: 1_793_395_200,
+      data: {
+        object: {
+          id: "cs_sub_1",
+          payment_status: "paid",
+          amount_total: 4900,
+          currency: "eur",
+          payment_intent: null,
+          invoice: "in_first_1",
+          subscription: "sub_1",
+          metadata: {},
+        },
+      },
+    });
+    expect(stripeAdapter.parse(raw, new Headers())).toMatchObject({
+      kind: "conversion",
+      externalId: "cs_sub_1",
+      paymentReference: "in_first_1",
+      subscriptionRef: "sub_1",
+    });
+  });
 });
 
 describe("Paddle adapter", () => {

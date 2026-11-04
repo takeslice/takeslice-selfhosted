@@ -1,7 +1,7 @@
 import "server-only";
 import { adapterFor } from "../adapters";
 import { isProviderId } from "../constants";
-import { getProviderConnection } from "./connections";
+import { getProviderConnection, recordProviderDelivery } from "./connections";
 import { ingestWebhookFact } from "./ingest";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { readBoundedBody } from "@/lib/request";
@@ -12,6 +12,15 @@ function json(body: Record<string, unknown>, status = 200): Response {
   return Response.json(body, { status, headers: { "Cache-Control": "no-store" } });
 }
 
+/** Surfaces a processing failure on the Providers page; never lets bookkeeping mask the response. */
+async function noteFailure(connectionId: string, message: string): Promise<void> {
+  try {
+    await recordProviderDelivery(connectionId, message.slice(0, 500));
+  } catch (error) {
+    console.error("[providers] could not record the webhook failure", error);
+  }
+}
+
 export async function handleProviderWebhook(
   providerParam: string,
   connectionId: string,
@@ -19,7 +28,14 @@ export async function handleProviderWebhook(
 ): Promise<Response> {
   if (!isProviderId(providerParam)) return json({ error: "Unknown provider." }, 404);
 
-  const connection = await getProviderConnection(connectionId);
+  let connection;
+  try {
+    connection = await getProviderConnection(connectionId);
+  } catch (error) {
+    // Typically a missing or rotated ENCRYPTION_KEY. 503 makes the provider retry later.
+    console.error("[providers] could not load the connection (check ENCRYPTION_KEY)", { provider: providerParam, connectionId, error });
+    return json({ error: "The webhook endpoint is temporarily unavailable." }, 503);
+  }
   if (!connection || connection.provider !== providerParam || connection.status !== "active" || !connection.webhookSecret) {
     return json({ error: "Unknown webhook endpoint." }, 404);
   }
@@ -58,10 +74,12 @@ export async function handleProviderWebhook(
     result = await ingestWebhookFact(connection, fact);
   } catch (error) {
     console.error("[providers] webhook processing failed", { provider: connection.provider, connectionId, error });
+    await noteFailure(connection.id, "A webhook could not be processed. See the application log.");
     return json({ error: "The webhook could not be processed. Retry later." }, 500);
   }
 
   if (!result.ok) {
+    await noteFailure(connection.id, result.error);
     return json({ error: result.error }, result.error.includes("not configured") ? 503 : 500);
   }
 

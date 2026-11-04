@@ -9,6 +9,9 @@ import { applyRefund } from "@/features/commissions/server/lifecycle";
 import { decideAttribution, type AttributionDecision } from "@/features/tracking/attribution";
 import { applySubscriptionFallback } from "@/features/tracking/server/fallback";
 import type { ActiveConnection, ProviderFact } from "../types";
+import { findStripeInvoiceForPaymentIntent } from "./stripe";
+
+const UNMATCHED_REFUND_GRACE_MS = 60 * 60 * 1000;
 
 export type WebhookIngestResult =
   | {
@@ -177,6 +180,42 @@ export async function ingestWebhookFact(connection: ActiveConnection, fact: Prov
   return { ok: true, ...result };
 }
 
+async function findRefundTarget(connection: ActiveConnection, reference: string, externalId: string) {
+  const [row] = await db
+    .select({
+      conversionId: conversion.id,
+      commissionId: commission.id,
+    })
+    .from(conversion)
+    .leftJoin(commission, eq(commission.conversionId, conversion.id))
+    .where(
+      and(
+        eq(conversion.providerConnectionId, connection.id),
+        eq(conversion.mode, connection.mode),
+        or(eq(conversion.providerPaymentRef, reference), eq(conversion.externalId, reference), eq(conversion.externalId, externalId)),
+      ),
+    )
+    // Prefer the conversion that produced commission: a duplicate, unattributed conversion
+    // for the same payment must never swallow a refund meant for the paid sale.
+    .orderBy(sql`${commission.id} is null`, desc(conversion.occurredAt))
+    .limit(1);
+  return row ?? null;
+}
+
+async function resolveStripeInvoice(connection: ActiveConnection, reference: string): Promise<string | null> {
+  const secretKey = connection.credentials.credential;
+  if (connection.provider !== "stripe" || !secretKey || !reference.startsWith("pi_")) return null;
+  try {
+    return await findStripeInvoiceForPaymentIntent(secretKey, reference);
+  } catch (error) {
+    console.warn("[providers] could not resolve the invoice for a Stripe refund", {
+      connectionId: connection.id,
+      error: error instanceof Error ? error.message : "unknown",
+    });
+    return null;
+  }
+}
+
 async function ingestRefundFact(
   connection: ActiveConnection,
   fact: Extract<ProviderFact, { kind: "refund" }>,
@@ -189,28 +228,17 @@ async function ingestRefundFact(
   if (already) return { ok: true, outcome: "duplicate", conversionId: null, attribution: null };
 
   const reference = fact.paymentReference ?? fact.externalId;
-  if (!reference) return { ok: true, outcome: "deferred", conversionId: null, attribution: null };
+  if (!reference) return deferUnmatchedRefund(connection, fact);
 
-  const [row] = await db
-    .select({
-      conversionId: conversion.id,
-      commissionId: commission.id,
-    })
-    .from(conversion)
-    .leftJoin(commission, eq(commission.conversionId, conversion.id))
-    .where(
-      and(
-        eq(conversion.providerConnectionId, connection.id),
-        eq(conversion.mode, connection.mode),
-        or(eq(conversion.providerPaymentRef, reference), eq(conversion.externalId, reference), eq(conversion.externalId, fact.externalId ?? reference)),
-      ),
-    )
-    // Prefer the conversion that produced commission: a duplicate, unattributed conversion
-    // for the same payment must never swallow a refund meant for the paid sale.
-    .orderBy(sql`${commission.id} is null`, desc(conversion.occurredAt))
-    .limit(1);
+  let row = await findRefundTarget(connection, reference, fact.externalId ?? reference);
+  if (!row) {
+    // Stripe refund events carry the PaymentIntent, while subscription sales are stored under
+    // their invoice (invoices no longer expose payment_intent or charge). Resolve the invoice.
+    const invoiceId = await resolveStripeInvoice(connection, reference);
+    if (invoiceId) row = await findRefundTarget(connection, invoiceId, invoiceId);
+  }
 
-  if (!row) return { ok: true, outcome: "deferred", conversionId: null, attribution: null };
+  if (!row) return deferUnmatchedRefund(connection, fact);
 
   if (!row.commissionId) {
     const claimed = await recordProviderEvent(connection.id, fact.providerEventId, fact.type, "ignored", row.conversionId);
@@ -233,6 +261,31 @@ async function ingestRefundFact(
   const claimed = await recordProviderEvent(connection.id, fact.providerEventId, fact.type, "processed", row.conversionId);
   await recordDelivery(connection.id);
   return { ok: true, outcome: claimed ? "processed" : "duplicate", conversionId: row.conversionId, attribution: null };
+}
+
+/**
+ * A refund can legitimately arrive before its conversion, so a fresh unmatched refund is deferred
+ * (HTTP 409) and the provider retries. Once it is older than the grace period it is almost
+ * certainly a sale TakeSlice never saw (another product on the account, or a payment from before
+ * the connection existed). Acknowledge it as ignored: endless 409s make Stripe email the account
+ * owner and eventually disable the endpoint, which would also stop real conversions.
+ */
+async function deferUnmatchedRefund(
+  connection: ActiveConnection,
+  fact: Extract<ProviderFact, { kind: "refund" }>,
+): Promise<WebhookIngestResult> {
+  const age = Date.now() - fact.occurredAt.getTime();
+  if (age < UNMATCHED_REFUND_GRACE_MS) {
+    return { ok: true, outcome: "deferred", conversionId: null, attribution: null };
+  }
+  console.warn("[providers] ignoring refund with no matching conversion", {
+    provider: connection.provider,
+    connectionId: connection.id,
+    providerEventId: fact.providerEventId,
+  });
+  const claimed = await recordProviderEvent(connection.id, fact.providerEventId, fact.type, "ignored", null);
+  await recordDelivery(connection.id);
+  return { ok: true, outcome: claimed ? "ignored" : "duplicate", conversionId: null, attribution: null };
 }
 
 async function recordProviderEvent(

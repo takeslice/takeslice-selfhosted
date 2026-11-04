@@ -188,7 +188,8 @@ export interface RefundInput {
   metadata?: Record<string, unknown>;
 }
 
-export type RefundResult = { ok: true; duplicate: boolean; amountMinor: number } | { ok: false; error: string };
+/** `retryable` marks unexpected failures (for example a database error) that a caller should retry. */
+export type RefundResult = { ok: true; duplicate: boolean; amountMinor: number } | { ok: false; error: string; retryable?: boolean };
 
 /**
  * Applies a refund or chargeback exactly once. Before availability the commission shrinks;
@@ -300,7 +301,7 @@ export async function applyRefund(input: RefundInput): Promise<RefundResult> {
     if (error instanceof RefundError) return { ok: false, error: error.message };
     if (isUniqueViolation(error)) return { ok: true, duplicate: true, amountMinor: 0 };
     console.error("[commissions] refund failed", error);
-    return { ok: false, error: "The refund could not be applied. Try again." };
+    return { ok: false, error: "The refund could not be applied. Try again.", retryable: true };
   }
 }
 

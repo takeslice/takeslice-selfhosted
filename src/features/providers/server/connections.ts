@@ -138,33 +138,53 @@ async function saveStripeConnection(input: ProviderConnectionInput, actorUserId:
     };
   }
 
-  await upsertConnection({
-    id,
-    provider: "stripe",
-    mode: input.mode,
-    status: "pending",
-    credential: input.credential,
-    webhookSecret: input.webhookSecret || null,
-    remoteWebhookId: existing?.remoteWebhookId ?? null,
-    lastError: null,
-    actorUserId,
-  });
-
+  // Never downgrade a working connection before the replacement exists: a failed reconnect must
+  // leave the previous webhook secret in place, or live events would 404 and Stripe would
+  // eventually disable the endpoint.
   if (input.webhookSecret) {
-    await markActive(id, input.webhookSecret, existing?.remoteWebhookId ?? null, actorUserId);
+    await upsertConnection({
+      id,
+      provider: "stripe",
+      mode: input.mode,
+      status: "active",
+      credential: input.credential,
+      webhookSecret: input.webhookSecret,
+      remoteWebhookId: existing?.remoteWebhookId ?? null,
+      lastError: null,
+      actorUserId,
+    });
     return { ok: true, id, message: "Stripe is connected with the signing secret you pasted." };
   }
 
+  let created: { id: string; secret: string };
   try {
-    const created = await createStripeWebhook(input.credential, webhookUrl("stripe", id), providerInfo("stripe").webhookEvents);
-    await markActive(id, created.secret, created.id, actorUserId);
-    if (existing?.remoteWebhookId) await deleteStripeWebhook(input.credential, existing.remoteWebhookId);
-    return { ok: true, id, message: "Stripe is connected. The webhook endpoint was created automatically." };
+    created = await createStripeWebhook(input.credential, webhookUrl("stripe", id), providerInfo("stripe").webhookEvents);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Stripe's webhook could not be created.";
-    await db.update(providerConnection).set({ lastError: message }).where(eq(providerConnection.id, id));
+    if (existing) await db.update(providerConnection).set({ lastError: message }).where(eq(providerConnection.id, id));
     return { ok: false, error: message };
   }
+
+  try {
+    await upsertConnection({
+      id,
+      provider: "stripe",
+      mode: input.mode,
+      status: "active",
+      credential: input.credential,
+      webhookSecret: created.secret,
+      remoteWebhookId: created.id,
+      lastError: null,
+      actorUserId,
+    });
+  } catch (error) {
+    // The new endpoint is not recorded anywhere, so remove it instead of orphaning it.
+    await deleteStripeWebhook(input.credential, created.id);
+    console.error("[providers] could not save the Stripe connection", error);
+    return { ok: false, error: "Stripe's webhook was created but the connection could not be saved. Try again." };
+  }
+  if (existing?.remoteWebhookId) await deleteStripeWebhook(input.credential, existing.remoteWebhookId);
+  return { ok: true, id, message: "Stripe is connected. The webhook endpoint was created automatically." };
 }
 
 interface UpsertInput {
@@ -214,28 +234,6 @@ async function upsertConnection(input: UpsertInput): Promise<void> {
       targetType: "provider_connection",
       targetId: input.id,
       metadata: { provider: input.provider, mode: input.mode },
-    });
-  });
-}
-
-async function markActive(id: string, webhookSecret: string, remoteWebhookId: string | null, actorUserId: string): Promise<void> {
-  await db.transaction(async (tx) => {
-    await tx
-      .update(providerConnection)
-      .set({
-        status: "active",
-        webhookSecretEncrypted: encryptSecret(webhookSecret),
-        remoteWebhookId,
-        lastError: null,
-      })
-      .where(eq(providerConnection.id, id));
-    await tx.insert(auditLog).values({
-      id: newId("aud"),
-      actorUserId,
-      action: "provider.activated",
-      targetType: "provider_connection",
-      targetId: id,
-      metadata: { remoteWebhookId },
     });
   });
 }

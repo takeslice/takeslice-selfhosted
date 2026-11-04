@@ -55,6 +55,6 @@ export async function POST(request: Request) {
   });
   void touchApiKey(key.id);
 
-  if (!result.ok) return json({ error: result.error }, 400);
+  if (!result.ok) return json({ error: result.error }, result.retryable ? 500 : 400);
   return json({ received: true, duplicate: result.duplicate, amountAppliedMinor: result.amountMinor });
 }
