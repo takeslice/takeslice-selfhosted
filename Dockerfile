@@ -15,7 +15,8 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # Build-time placeholders: Next imports server modules while compiling. Runtime values come from the environment.
-ENV SKIP_ENV_VALIDATION=1 \
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    SKIP_ENV_VALIDATION=1 \
     DATABASE_URL=postgres://build:build@localhost:5432/build \
     APP_URL=http://localhost:3000 \
     BETTER_AUTH_SECRET=build-only-placeholder-secret-value-000000
@@ -37,6 +38,7 @@ FROM base AS runner
 # Standalone Next binds to HOSTNAME, which Docker sets to the container ID. Listen
 # on every interface so health checks and reverse proxies reach the server.
 ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     DATA_DIR=/app/data

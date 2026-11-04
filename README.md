@@ -108,12 +108,13 @@ You create a payout for available items, transfer the money externally, and mark
 - Explicit lifecycle: pending, approved, available, paid, declined, reversed.
 - Append-only commission history, ledger entries, and audit records.
 - Admin decline and reverse actions with a required reason.
-- Idempotent refunds and chargebacks, including partial refunds, full refunds, and refunds after payout.
+- Idempotent refunds and chargebacks, including partial refunds, full refunds, and refunds after payout. Stripe subscription refunds are matched through the invoice; other providers rely on the refund API unless their signed refund events are listed below.
+- Fraud protection is limited to the validation and holding periods, manual decline and reverse, and refund clawback. There is no automatic self-referral or click-fraud detection yet.
 - Refund API for any provider flow that does not deliver signed refund events.
 
 ### Payouts
 
-- Manual payouts only: TakeSlice records the transfer, it does not move money itself.
+- Manual payouts only: TakeSlice records the transfer, it does not move money itself. There is no CSV export or bulk payout yet.
 - Available-balance calculation with active adjustments.
 - Payout items reserve commissions and adjustments so nothing can be paid twice.
 - Mark paid with a reference, or cancel to release the reserved items.
@@ -224,6 +225,12 @@ docker compose logs app | grep -i "enter this token"
 If you set `SETUP_TOKEN` yourself, use that value instead.
 
 The wizard creates the admin account and the initial program settings. After setup, sign in at `/login` and configure payment providers under **Providers**.
+
+> **Configure SMTP before inviting partners.** Partner sign-up and password reset send a 6-digit code by email. Until you add SMTP settings under **Settings > Email**, partners cannot verify their address and sign-up will tell them the instance cannot send email. The email step in the wizard can be skipped, so check this before you launch.
+>
+> **Back up `ENCRYPTION_KEY`.** Provider credentials, webhook secrets, the SMTP password and affiliate payout details are encrypted with it. If the key is lost or changed they cannot be recovered. Keep `.env` and the `app-data` volume together in your backups.
+>
+> **Behind a reverse proxy**, set `TRUST_PROXY=true` (and `APP_URL` to your `https://` address). Without it every visitor shares one rate-limit bucket, which can drop clicks during a traffic spike.
 
 ### 5. Connect your product
 

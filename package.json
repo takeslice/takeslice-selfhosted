@@ -1,15 +1,28 @@
 {
   "name": "takeslice-selfhosted",
   "version": "0.1.0",
+  "description": "Open-source, self-hosted affiliate platform: referral tracking, commissions, and manual payouts for your own product.",
+  "homepage": "https://github.com/takeslice/takeslice-selfhosted#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/takeslice/takeslice-selfhosted.git"
+  },
+  "bugs": {
+    "url": "https://github.com/takeslice/takeslice-selfhosted/issues"
+  },
   "private": true,
   "license": "AGPL-3.0-only",
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.9"
   },
   "packageManager": "pnpm@10.33.0",
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "sharp", "unrs-resolver"]
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "sharp",
+      "unrs-resolver"
+    ]
   },
   "scripts": {
     "dev": "next dev",
@@ -23,7 +36,7 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
     "db:studio": "drizzle-kit studio",
-    "worker": "node --conditions=react-server --import tsx scripts/worker.ts"
+    "worker": "node --env-file-if-exists=.env --conditions=react-server --import tsx scripts/worker.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^6.0.2",
@@ -43,7 +56,6 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-hook-form": "^7.91.0",
-    "recharts": "^3.10.1",
     "server-only": "^0.0.1",
     "sharp": "^0.35.5",
     "sonner": "^2.0.8",
