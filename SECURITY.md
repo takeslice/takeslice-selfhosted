@@ -10,6 +10,8 @@ Use GitHub's private vulnerability reporting on the repository:
 2. Choose **Report a vulnerability**.
 3. Include affected version or commit, reproduction steps, impact, and any suggested fix.
 
+If you cannot use GitHub, email [hello@takeslice.com](mailto:hello@takeslice.com) with the same details.
+
 Do not open a public issue for a suspected vulnerability, and do not include live secrets, customer data, or payment credentials in a report. If you need to demonstrate a credential leak, use a revoked test key.
 
 You should receive an acknowledgement within a few business days. Please allow time for a fix and coordinated disclosure before publishing details.
