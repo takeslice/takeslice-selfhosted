@@ -25,6 +25,8 @@ export const conversionSchema = z
     subscriptionRef: z.string().trim().min(1).max(200).optional(),
     /** Provider payment or charge ID so a later refund can be matched. */
     paymentReference: z.string().trim().min(1).max(200).optional(),
+    /** Buyer email, used only to block an affiliate earning commission on their own purchase. Not stored. */
+    customerEmail: z.email().max(320).optional(),
     renewal: z.boolean().optional().default(false),
     occurredAt: z.coerce.date().optional(),
   })

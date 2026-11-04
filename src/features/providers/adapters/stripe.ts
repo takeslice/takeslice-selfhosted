@@ -115,6 +115,7 @@ export const stripeAdapter: ProviderAdapter = {
         occurredAt: created,
         clickId: clickIdFromMetadata(metadata),
         couponCode: couponFromMetadata(metadata),
+        customerEmail: optionalString(object.customer_email),
         subscriptionRef: optionalString(object.subscription) ?? optionalString(parentDetails?.subscription),
         paymentReference: optionalString(object.payment_intent) ?? optionalString(object.charge) ?? externalId,
         renewal: billingReason === "subscription_cycle",
@@ -139,6 +140,7 @@ export const stripeAdapter: ProviderAdapter = {
       occurredAt: created,
       clickId: clickIdFromMetadata({ client_reference_id: object.client_reference_id }) ?? clickIdFromMetadata(metadata),
       couponCode: couponFromMetadata(metadata),
+      customerEmail: optionalString(read(object, "customer_details", "email")) ?? optionalString(object.customer_email),
       subscriptionRef: optionalString(object.subscription),
       // Subscription-mode sessions have no PaymentIntent; their first payment is the session's invoice.
       paymentReference: optionalString(object.payment_intent) ?? optionalString(object.invoice) ?? optionalString(object.id),

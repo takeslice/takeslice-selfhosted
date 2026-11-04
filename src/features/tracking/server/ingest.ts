@@ -9,6 +9,7 @@ import type { AuthenticatedKey } from "@/features/api-keys/server/keys";
 import { decideAttribution, type AttributionDecision, type TrackingMode } from "../attribution";
 import type { ConversionInput } from "../schemas";
 import { applySubscriptionFallback } from "./fallback";
+import { applySelfReferralGuard } from "./self-referral";
 
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
 
@@ -41,7 +42,7 @@ export async function ingestApiConversion(key: AuthenticatedKey, input: Conversi
   const clickRow = await loadClick(input.clickId);
   const couponRow = await loadCoupon(input.couponCode ?? null);
 
-  const attribution = await applySubscriptionFallback(
+  const decided = await applySubscriptionFallback(
     decideAttribution({
       mode: key.mode,
       click: input.clickId ? (clickRow ?? null) : undefined,
@@ -54,6 +55,7 @@ export async function ingestApiConversion(key: AuthenticatedKey, input: Conversi
     }),
     { mode: key.mode, renewal: input.renewal, subscriptionRef: input.subscriptionRef ?? null },
   );
+  const attribution = await applySelfReferralGuard(decided, input.customerEmail);
 
   const dedupeKey = `api:${key.mode}:${input.externalId}`;
   const id = newId("cnv");

@@ -20,6 +20,8 @@ export interface ConversionFact {
   couponCode: string | null;
   subscriptionRef: string | null;
   paymentReference?: string | null;
+  /** Buyer email, used only for the self-referral check. Never stored. */
+  customerEmail?: string | null;
   renewal: boolean;
 }
 

@@ -114,6 +114,7 @@ export const conversion = pgTable(
         "affiliate_inactive",
         "currency_mismatch",
         "coupon_conflict",
+        "self_referral",
       ],
     }).notNull(),
     couponCode: text("coupon_code"),

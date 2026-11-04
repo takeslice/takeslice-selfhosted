@@ -8,6 +8,7 @@ import { createCommissionForConversion } from "@/features/commissions/server/cre
 import { applyRefund } from "@/features/commissions/server/lifecycle";
 import { decideAttribution, type AttributionDecision } from "@/features/tracking/attribution";
 import { applySubscriptionFallback } from "@/features/tracking/server/fallback";
+import { applySelfReferralGuard } from "@/features/tracking/server/self-referral";
 import type { ActiveConnection, ProviderFact } from "../types";
 import { findStripeInvoiceForPaymentIntent } from "./stripe";
 
@@ -70,7 +71,7 @@ export async function ingestWebhookFact(connection: ActiveConnection, fact: Prov
 
   const clickRow = await loadClick(fact.clickId);
   const couponRow = await loadCoupon(fact.couponCode);
-  const attribution = await applySubscriptionFallback(
+  const decided = await applySubscriptionFallback(
     decideAttribution({
       mode: connection.mode,
       click: fact.clickId ? (clickRow ?? null) : undefined,
@@ -83,6 +84,7 @@ export async function ingestWebhookFact(connection: ActiveConnection, fact: Prov
     }),
     { mode: connection.mode, renewal: fact.renewal, subscriptionRef: fact.subscriptionRef },
   );
+  const attribution = await applySelfReferralGuard(decided, fact.customerEmail);
 
   const result = await db.transaction(async (tx) => {
     const claimed = await tx

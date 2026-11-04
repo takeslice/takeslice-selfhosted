@@ -8,7 +8,8 @@ export type AttributionOutcome =
   | "wrong_mode"
   | "affiliate_inactive"
   | "currency_mismatch"
-  | "coupon_conflict";
+  | "coupon_conflict"
+  | "self_referral";
 
 export type AttributedVia = "click" | "coupon" | "subscription" | "none";
 
@@ -121,4 +122,5 @@ export const OUTCOME_LABELS: Record<AttributionOutcome, string> = {
   affiliate_inactive: "Affiliate was not active",
   currency_mismatch: "Currency does not match the program",
   coupon_conflict: "Conflicting attribution signals",
+  self_referral: "Buyer is the affiliate (self-referral)",
 };
