@@ -23,6 +23,7 @@ async function setupAttemptAllowed(scope: "token" | "submit"): Promise<boolean> 
     `setup:${scope}:${clientAddress(requestHeaders)}`,
     SETUP_ATTEMPT_LIMIT,
     SETUP_ATTEMPT_WINDOW_SECONDS,
+    { failClosed: true },
   );
   return rate.allowed;
 }

@@ -71,7 +71,7 @@ export const auth = betterAuth({
       if (ctx.path === "/sign-in/email") {
         const email = typeof ctx.body?.email === "string" ? ctx.body.email : "";
         if (email) {
-          const attempt = await checkRateLimit(accountRateLimitKey(email), SIGN_IN_ACCOUNT_MAX, SIGN_IN_ACCOUNT_WINDOW_SECONDS);
+          const attempt = await checkRateLimit(accountRateLimitKey(email), SIGN_IN_ACCOUNT_MAX, SIGN_IN_ACCOUNT_WINDOW_SECONDS, { failClosed: true });
           if (!attempt.allowed) {
             throw new APIError("TOO_MANY_REQUESTS", { message: "Too many sign-in attempts for this account. Try again in a few minutes." });
           }
@@ -107,11 +107,25 @@ export const auth = betterAuth({
       async sendVerificationOTP({ email, otp, type }) {
         if (type === "forget-password") {
           const message = resetPasswordEmail(email, otp, env.APP_URL);
-          await sendEmail({ ...message, subject: "Your password reset code" });
+          const result = await sendEmail({ ...message, subject: "Your password reset code" });
+          // Never throw here: a failure only occurs for existing accounts, so surfacing it
+          // would reveal which emails are registered. Log loudly for the operator instead.
+          if (result.status === "not_configured" || result.status === "failed") {
+            console.error("[auth] password reset code could not be delivered", { reason: result.status });
+          }
           return;
         }
         const message = verifyEmailEmail(email, otp, env.APP_URL);
-        await sendEmail({ ...message, subject: "Your confirmation code" });
+        const result = await sendEmail({ ...message, subject: "Your confirmation code" });
+        if (result.status === "not_configured" || result.status === "failed") {
+          console.error("[auth] confirmation code could not be delivered", { reason: result.status });
+          throw new APIError("SERVICE_UNAVAILABLE", {
+            message:
+              result.status === "not_configured"
+                ? "This instance cannot send email yet. Ask the administrator to configure SMTP in Settings > Email."
+                : "The confirmation email could not be sent. Try again shortly or contact the administrator.",
+          });
+        }
       },
     }),
     nextCookies(), // must stay last: sets cookies from server actions

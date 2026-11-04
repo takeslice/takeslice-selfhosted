@@ -170,6 +170,9 @@ async function deliverDirectEmail(payload: Record<string, unknown>): Promise<voi
     text: `${payload.title}\n\n${stripTags(body)}${href ? `\n\n${env.APP_URL}${href}` : ""}`,
   });
   if (result.status === "failed") throw new Error(result.error);
+  // Direct emails (for example a payout notice to an affiliate without an account) have no
+  // in-app copy, so a missing SMTP config must not be recorded as a success.
+  if (result.status === "not_configured") throw new Error("Email is not configured. Add SMTP settings under Settings > Email.");
 }
 
 async function markEmail(

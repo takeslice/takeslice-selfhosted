@@ -154,7 +154,12 @@ export async function submitApplication(userId: string, input: ApplicationInput,
   const applicantMessage = applicationReceived(account.email, programName, env.APP_URL);
   const applicantEmail = await sendEmail(applicantMessage);
   const adminEmail = await getAdminEmail();
-  if (adminEmail) await sendEmail(newApplicationForAdmin(adminEmail, input.displayName, env.APP_URL));
+  if (adminEmail) {
+    const adminResult = await sendEmail(newApplicationForAdmin(adminEmail, input.displayName, env.APP_URL));
+    if (adminResult.status === "failed" || adminResult.status === "not_configured") {
+      console.warn("[applications] could not notify the admin of a new application", { reason: adminResult.status });
+    }
+  }
 
   return { ok: true, applicationId, emailStatus: applicantEmail.status };
 }
