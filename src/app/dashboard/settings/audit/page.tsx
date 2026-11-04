@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireAdmin } from "@/lib/auth/session";
 import Link from "next/link";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +35,7 @@ const LABELS: Record<string, string> = {
 };
 
 export default async function AuditLogPage({ searchParams }: PageProps<"/dashboard/settings/audit">) {
+  await requireAdmin();
   const { q } = await searchParams;
   const query = typeof q === "string" ? q : "";
   const rows = await listAuditLogs({ query });

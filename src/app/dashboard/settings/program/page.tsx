@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireAdmin } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { getProgramSettings } from "@/features/program/server/settings";
@@ -7,6 +8,7 @@ import { ProgramSettingsForm } from "@/features/program/components/program-setti
 export const metadata: Metadata = { title: "Program settings" };
 
 export default async function ProgramSettingsPage() {
+  await requireAdmin();
   const settings = await getProgramSettings();
   if (!settings) redirect("/dashboard");
 

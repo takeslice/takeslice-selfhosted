@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireAdmin } from "@/lib/auth/session";
 import Link from "next/link";
 import { ArrowRight, KeyRound, Mail, Palette, PencilRuler, ScrollText, SlidersHorizontal, Sparkles } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/page-header";
@@ -20,6 +21,7 @@ const SECTIONS = [
 ] as const;
 
 export default async function SettingsPage() {
+  await requireAdmin();
   const [settings, email, questions] = await Promise.all([getProgramSettings(), getEmailSettings(), listQuestions()]);
   const activeQuestions = questions.filter((question) => question.active).length;
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireAdmin } from "@/lib/auth/session";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { AiSetup } from "@/features/ai-setup/components/ai-setup";
 import { sanitizeInstanceUrl, type AiProviderId, type AiSetupConnection } from "@/features/ai-setup/prompt";
@@ -8,6 +9,7 @@ import { env } from "@/lib/env";
 export const metadata: Metadata = { title: "AI Setup" };
 
 export default async function AiSetupPage() {
+  await requireAdmin();
   const connections = await listProviderConnections();
   const safeConnections: (AiSetupConnection & { provider: AiProviderId })[] = connections.map((connection) => ({
     provider: connection.provider,

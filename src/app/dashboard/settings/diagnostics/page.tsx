@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireAdmin } from "@/lib/auth/session";
 import Link from "next/link";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +30,7 @@ function describeAge(value: Date, now: Date): string {
 }
 
 export default async function DiagnosticsPage() {
+  await requireAdmin();
   const data = await getDiagnosticsOverview();
   const now = data.checkedAt;
   const lastSeenAt = data.worker.lastSeenAt;

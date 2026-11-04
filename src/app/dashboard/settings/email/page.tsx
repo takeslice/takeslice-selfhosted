@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { requireAdmin } from "@/lib/auth/session";
 import { redirect } from "next/navigation";
 import { PageHeader } from "@/components/dashboard/page-header";
 import { getEmailSettings } from "@/lib/email";
@@ -7,6 +8,7 @@ import { EmailSettingsForm } from "@/features/email/components/email-settings-fo
 export const metadata: Metadata = { title: "Email settings" };
 
 export default async function EmailSettingsPage() {
+  await requireAdmin();
   const settings = await getEmailSettings();
   if (!settings) redirect("/dashboard");
 
